@@ -3,443 +3,604 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D Cartoon Earth - Explosive Weather & Hand Controller</title>
-    <!-- Tailwind CSS for modern responsive UI styling -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Three.js for 3D graphics rendering -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <!-- TensorFlow.js Core & WebGL Backend -->
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core@4.10.0/dist/tf-core.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl@4.10.0/dist/tf-backend-webgl.min.js"></script>
-    <!-- TensorFlow.js Hand Pose Detection -->
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/hand-pose-detection@2.0.0/dist/hand-pose-detection.min.js"></script>
-    <!-- MediaPipe Hands Solution Bundle -->
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/hands.js"></script>
-    <!-- Lucide Icons for comic UI aesthetics -->
-    <script src="https://unpkg.com/lucide@latest"></script>
-    <!-- Google Fonts for comic typography -->
-    <link href="https://fonts.googleapis.com/css2?family=Comic+Neue:wght@400;700&family=Permanent+Marker&display=swap" rel="stylesheet">
+    <title>3D Cartoon Earth - Gesture & Weather Simulation</title>
     <style>
         body {
-            font-family: 'Comic Neue', cursive, sans-serif;
-            background-color: #fdf6e2;
-            background-image: radial-gradient(#e5d5b5 1px, transparent 1px);
-            background-size: 24px 24px;
-            overflow: hidden;
             margin: 0;
             padding: 0;
-        }
-        .comic-border {
-            border: 3px solid #2d2d2d;
-            box-shadow: 4px 4px 0px #2d2d2d;
-            border-radius: 16px;
-        }
-        .comic-button {
-            border: 2px solid #2d2d2d;
-            box-shadow: 3px 3px 0px #2d2d2d;
-            transition: all 0.1s ease;
-            cursor: pointer;
-        }
-        .comic-button:active {
-            transform: translate(2px, 2px);
-            box-shadow: 1px 1px 0px #2d2d2d;
+            overflow: hidden;
+            background-color: #050510;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            user-select: none;
         }
         #canvas-container {
-            position: fixed;
+            position: absolute;
             top: 0;
             left: 0;
             width: 100vw;
             height: 100vh;
-            z-index: 0;
+            z-index: 1;
         }
-        @keyframes rumbleAnim {
-            0% { transform: translate(0, 0) rotate(0deg); }
-            20% { transform: translate(-3px, 3px) rotate(-1deg); }
-            40% { transform: translate(3px, -2px) rotate(1deg); }
-            60% { transform: translate(-2px, -3px) rotate(0deg); }
-            80% { transform: translate(3px, 2px) rotate(1deg); }
-            100% { transform: translate(0, 0) rotate(0deg); }
+        #webcam-video {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 160px;
+            height: 120px;
+            border-radius: 12px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            transform: scaleX(-1);
+            z-index: 10;
+            object-fit: cover;
+            background: #111;
         }
-        .rumble-active {
-            animation: rumbleAnim 0.3s infinite ease-in-out;
+        #ui-overlay {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 10;
+            color: white;
+            pointer-events: none;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+        }
+        h1 {
+            margin: 0 0 5px 0;
+            font-size: 24px;
+            letter-spacing: 1px;
+            color: #4facfe;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 20px;
+            background: rgba(255,255,255,0.15);
+            font-size: 13px;
+            margin-top: 5px;
+            backdrop-filter: blur(5px);
+        }
+        #controls-panel {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            z-index: 10;
+            background: rgba(10, 10, 25, 0.7);
+            padding: 15px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(10px);
+            color: white;
+            font-size: 13px;
+            max-width: 280px;
+        }
+        #controls-panel h3 {
+            margin: 0 0 8px 0;
+            font-size: 15px;
+            color: #00f2fe;
+        }
+        #controls-panel ul {
+            margin: 0;
+            padding-left: 18px;
+        }
+        #controls-panel li {
+            margin-bottom: 4px;
+        }
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 100;
+            color: white;
+            font-size: 22px;
+            text-align: center;
+            background: rgba(0,0,0,0.85);
+            padding: 30px 50px;
+            border-radius: 15px;
+            border: 1px solid rgba(255,255,255,0.2);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid rgba(255,255,255,0.1);
+            border-top: 4px solid #4facfe;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 15px auto 0 auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
     </style>
 </head>
-<body class="relative w-screen h-screen select-none overflow-hidden">
-
-    <div id="canvas-container"></div>
-
-    <div id="ui-wrapper" class="absolute inset-0 z-10 pointer-events-none flex flex-col justify-between p-4 md:p-6">
-        
-        <header class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pointer-events-auto">
-            <div class="bg-amber-100 comic-border px-6 py-3">
-                <h1 class="text-2xl md:text-3xl font-bold text-stone-800 tracking-wide flex items-center gap-2" style="font-family: 'Permanent Marker', cursive;">
-                    <i data-lucide="globe" class="w-7 h-7"></i> Doodle Globe 3D
-                </h1>
-                <p class="text-xs md:text-sm text-stone-600 font-bold">Explosive Physics • Weather Engine • Hand Tracking</p>
-            </div>
-
-            <!-- Status & Weather Badge -->
-            <div class="flex items-center gap-3">
-                <div id="weather-card" class="bg-sky-100 comic-border px-4 py-2 flex items-center gap-2">
-                    <i id="weather-icon" data-lucide="sun" class="w-5 h-5 text-amber-600"></i>
-                    <div>
-                        <div class="text-[10px] text-stone-500 font-bold uppercase tracking-wider">Weather Mode</div>
-                        <div id="weather-text" class="text-xs font-bold text-stone-800">Normal Sunshine</div>
-                    </div>
-                </div>
-
-                <div id="status-card" class="bg-amber-100 comic-border px-4 py-2 flex items-center gap-3">
-                    <div id="status-dot" class="w-4 h-4 rounded-full bg-amber-500 border-2 border-stone-800 animate-pulse"></div>
-                    <div>
-                        <div id="status-text" class="text-xs font-bold text-stone-800">Loading AI Model...</div>
-                        <div id="gesture-feedback" class="text-xs text-stone-600 font-semibold">Ready for gestures</div>
-                    </div>
-                </div>
-            </div>
-        </header>
-
-        <main class="flex-1 flex items-center justify-between pointer-events-none">
-            <!-- Gesture Guide -->
-            <div class="hidden lg:flex flex-col gap-1.5 bg-amber-50/95 comic-border p-3.5 pointer-events-auto max-w-xs backdrop-blur-sm">
-                <h3 class="font-bold text-stone-800 border-b-2 border-stone-800 pb-1 flex items-center gap-2">
-                    <i data-lucide="hand" class="w-4 h-4"></i> Gesture Controls
-                </h3>
-                <ul class="text-[11px] space-y-1 text-stone-700 font-medium">
-                    <li class="bg-amber-100/70 p-1 rounded border border-stone-300">✋ <b>Left Open:</b> Turn Left</li>
-                    <li class="bg-amber-100/70 p-1 rounded border border-stone-300">✊ <b>Left Closed:</b> Turn Right</li>
-                    <li class="bg-amber-100/70 p-1 rounded border border-stone-300">✋ <b>Right Open:</b> Turn Up</li>
-                    <li class="bg-amber-100/70 p-1 rounded border border-stone-300">✊ <b>Right Closed:</b> Turn Down</li>
-                    <li class="bg-amber-100/70 p-1 rounded border border-stone-300">👐 <b>Both Open:</b> Magnify (Zoom In)</li>
-                    <li class="bg-amber-100/70 p-1 rounded border border-stone-300">✊✊ <b>Both Closed:</b> Diverge (Zoom Out)</li>
-                    <li class="bg-sky-100/90 p-1 rounded border border-sky-300 font-bold text-sky-900">🖕 <b>Middle Finger:</b> Cycle Weather</li>
-                    <li class="bg-rose-100/90 p-1 rounded border border-rose-300 font-bold text-rose-900">👎👎 <b>Both Thumbs Down:</b> EXPLODE!</li>
-                </ul>
-            </div>
-
-            <!-- Webcam & Controls -->
-            <div class="self-end ml-auto flex flex-col items-end gap-3 pointer-events-auto">
-                <div class="relative w-36 h-28 md:w-48 md:h-36 bg-stone-900 comic-border overflow-hidden">
-                    <video id="webcam" class="w-full h-full object-cover transform -scale-x-100" autoplay playsinline muted></video>
-                    <canvas id="output_canvas" class="absolute inset-0 w-full h-full pointer-events-none transform -scale-x-100 opacity-85"></canvas>
-                    <div class="absolute bottom-1 left-1 bg-amber-200/90 text-stone-900 text-[10px] font-bold px-1.5 py-0.5 rounded border border-stone-800 flex items-center gap-1">
-                        <i data-lucide="video" class="w-3 h-3"></i> WEBCAM
-                    </div>
-                </div>
-
-                <div class="bg-amber-100 comic-border p-3 flex flex-col gap-2 w-48 md:w-56">
-                    <div class="flex justify-between items-center">
-                        <span class="text-xs font-bold text-stone-800">Control Mode</span>
-                        <button id="toggle-mode" class="comic-button bg-amber-300 text-stone-900 text-xs font-bold px-2.5 py-1 rounded">
-                            TFJS Hands
-                        </button>
-                    </div>
-                    <div class="grid grid-cols-2 gap-1.5 pt-1">
-                        <button id="btn-reset" class="comic-button bg-stone-200 hover:bg-stone-300 text-stone-800 text-xs font-bold py-1 px-2 rounded flex items-center justify-center gap-1">
-                            <i data-lucide="rotate-ccw" class="w-3 h-3"></i> Reset
-                        </button>
-                        <button id="btn-explode" class="comic-button bg-rose-300 hover:bg-rose-400 text-stone-900 text-xs font-bold py-1 px-2 rounded flex items-center justify-center gap-1">
-                            <i data-lucide="bomb" class="w-3 h-3"></i> Explode
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </main>
-
-        <footer class="pointer-events-auto flex justify-center">
-            <div class="bg-amber-100/90 comic-border px-4 py-1 text-xs text-stone-700 font-bold text-center flex items-center gap-2">
-                <i data-lucide="sparkles" class="w-3.5 h-3.5"></i> High-Detail Parchment World Map • 60 FPS Three.js Engine
-            </div>
-        </footer>
-
+<body>
+    <div id="loading">
+        Loading AI Hand Tracking & Earth Assets...
+        <div class="spinner"></div>
     </div>
 
+    <div id="ui-overlay">
+        <h1>Cartoon Earth Simulation</h1>
+        <div id="weather-status" class="status-badge">Weather: Normal</div>
+        <div id="gesture-status" class="status-badge">Gesture: Tracking...</div>
+    </div>
+
+    <div id="controls-panel">
+        <h3>Gesture Controls</h3>
+        <ul>
+            <li><b>Open/Close Hand:</b> Rotate & Scale Globe</li>
+            <li><b>Middle Finger:</b> Cycle Weather (Normal ➔ Rain ➔ Storm ➔ Rumble)</li>
+            <li><b>Double Thumbs Down:</b> Fracture & Magma Eruption ➔ Magnetic Reassembly</li>
+        </ul>
+    </div>
+
+    <video id="webcam-video" autoplay playsinline muted></video>
+    <div id="canvas-container"></div>
+
+    <!-- External Libraries via CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core@3.21.0/dist/tf-core.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl@3.21.0/dist/tf-backend-webgl.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/hand-pose-detection"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands"></script>
+
     <script>
-        let scene, camera, renderer, earthGroup, earthMesh, cloudsMesh, starsMesh;
-        let weatherParticles = null;
-        let lightningLight = null;
-
-        let earthQuaternion = new THREE.Quaternion();
-        let targetQuaternion = new THREE.Quaternion();
-        
-        let targetZoom = 15, currentZoom = 15;
-        let controlMode = 'hands';
-        
-        let leftHandState = 'none'; 
-        let rightHandState = 'none';
-        let weatherModeIndex = 0; // 0: Normal, 1: Raining, 2: Storms, 3: Rumbling
-        const weatherModes = [
-            { name: 'Normal Sunshine', icon: 'sun', color: '#fdf6e2' },
-            { name: 'Raining', icon: 'cloud-rain', color: '#dbeafe' },
-            { name: 'Storms', icon: 'cloud-lightning', color: '#e0e7ff' },
-            { name: 'Rumbling Quake', icon: 'activity', color: '#fee2e2' }
-        ];
-
-        let handDetector = null;
-        let webcamRunning = false;
-        let lastFrameTime = 0;
-        let lastMiddleTriggerTime = 0;
-        let lastExplodeTriggerTime = 0;
-
-        // Explosion state variables
+        // --- Application State ---
+        let scene, camera, renderer, earthGroup, cloudMesh, atmosphereMesh;
+        let crustShards = [], coreMesh, mantleMesh, dustParticles, tornados = [];
+        let weatherState = 'normal'; // normal, rain, storm, rumble
         let isExploded = false;
-        let debrisSystem = null;
-        let debrisVelocities = [];
+        let explosionProgress = 0;
+        let reassembling = false;
+        let reassembleTimer = 0;
+        
+        let detector = null;
+        let videoElement = document.getElementById('webcam-video');
+        let weatherStatusEl = document.getElementById('weather-status');
+        let gestureStatusEl = document.getElementById('gesture-status');
 
-        function initThree() {
+        // Interaction state
+        let globeRotation = { x: 0.2, y: 0 };
+        let targetRotation = { x: 0.2, y: 0 };
+        let isDragging = false;
+        let previousMousePosition = { x: 0, y: 0 };
+        let lastMiddleFingerTime = 0;
+        let lastThumbsDownTime = 0;
+
+        // Weather particle systems
+        let rainSystem, snowSystem, lightningLight;
+
+        async function init() {
+            // 1. Setup Three.js Scene
             const container = document.getElementById('canvas-container');
-            
             scene = new THREE.Scene();
-            scene.background = new THREE.Color('#fdf6e2');
-            scene.fog = new THREE.FogExp2('#fdf6e2', 0.015);
-
+            
             camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.z = currentZoom;
+            camera.position.z = 18;
 
-            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: "high-performance" });
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
             container.appendChild(renderer.domElement);
 
-            const ambientLight = new THREE.AmbientLight(0xffffff, 0.9);
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
             scene.add(ambientLight);
 
-            const directionalLight = new THREE.DirectionalLight(0xfffaed, 1.2);
-            directionalLight.position.set(15, 25, 20);
-            scene.add(directionalLight);
+            const sunLight = new THREE.DirectionalLight(0xffffff, 1.5);
+            sunLight.position.set(15, 10, 15);
+            scene.add(sunLight);
 
-            lightningLight = new THREE.PointLight(0x93c5fd, 0, 50);
-            lightningLight.position.set(0, 0, 10);
+            lightningLight = new THREE.PointLight(0x00ffff, 0, 50);
+            lightningLight.position.set(0, 0, 0);
             scene.add(lightningLight);
 
-            createDetailedCartoonEarth();
-            createCartoonStars();
-            createWeatherParticlesSystem();
+            // Create Starfield Background
+            createStarfield();
 
+            // Build Earth & Layers
+            buildEarthSystem();
+
+            // Setup Weather Systems
+            setupWeatherSystems();
+
+            // Event Listeners
             window.addEventListener('resize', onWindowResize);
-            setupCameraRelativeDrag();
+            setupMouseControls();
+
+            // Initialize Webcam & Hand Detector
+            await initHandTracking();
+
+            // Remove loading screen
+            document.getElementById('loading').style.display = 'none';
+
+            // Start Animation Loop
+            animate();
         }
 
-        function createDetailedEarthTextures() {
-            const canvas = document.createElement('canvas');
-            canvas.width = 2048;
-            canvas.height = 1024;
-            const ctx = canvas.getContext('2d');
-
-            ctx.fillStyle = '#60a5fa';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
-            ctx.lineWidth = 2;
-            for (let x = 0; x < canvas.width; x += 128) {
-                ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
-            }
-            for (let y = 0; y < canvas.height; y += 128) {
-                ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
-            }
-
-            ctx.fillStyle = '#4ade80';
-            ctx.strokeStyle = '#2d2d2d';
-            ctx.lineWidth = 8;
-            ctx.lineJoin = 'round';
-
-            function drawDetailedContinent(cx, cy, radius, points, roughness = 0.3) {
-                ctx.beginPath();
-                for (let i = 0; i < points; i++) {
-                    const angle = (i / points) * Math.PI * 2;
-                    const r = radius * (1.0 + Math.sin(i * 3.1) * roughness + Math.cos(i * 1.7) * (roughness * 0.7));
-                    const x = cx + Math.cos(angle) * r;
-                    const y = cy + Math.sin(angle) * r;
-                    if (i === 0) ctx.moveTo(x, y);
-                    else ctx.lineTo(x, y);
-                }
-                ctx.closePath();
-                ctx.fill();
-                ctx.stroke();
-            }
-
-            drawDetailedContinent(480, 280, 200, 16, 0.35);
-            drawDetailedContinent(580, 720, 160, 14, 0.3);
-            drawDetailedContinent(1150, 300, 320, 20, 0.4);
-            drawDetailedContinent(1050, 700, 210, 16, 0.25);
-            drawDetailedContinent(1620, 780, 130, 12, 0.2);
-            drawDetailedContinent(850, 150, 90, 10, 0.25);
-            ctx.fillStyle = '#f3f4f6';
-            ctx.beginPath();
-            ctx.rect(0, 950, canvas.width, 74);
-            ctx.fill();
-            ctx.stroke();
-
-            const texture = new THREE.CanvasTexture(canvas);
-            texture.wrapS = THREE.RepeatWrapping;
-            texture.wrapT = THREE.ClampToEdgeWrapping;
-            return texture;
-        }
-
-        function createSparseCloudsTexture() {
+        // --- Procedural Textures & Earth Generation ---
+        function createCartoonEarthTexture() {
             const canvas = document.createElement('canvas');
             canvas.width = 1024;
             canvas.height = 512;
             const ctx = canvas.getContext('2d');
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-            ctx.strokeStyle = '#2d2d2d';
-            ctx.lineWidth = 4;
+            // Ocean background
+            ctx.fillStyle = '#2196F3';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            for (let i = 0; i < 14; i++) {
-                let cx = Math.random() * canvas.width;
-                let cy = Math.random() * canvas.height;
-                let r = 30 + Math.random() * 35;
-                ctx.beginPath();
-                ctx.arc(cx, cy, r, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.stroke();
-            }
+            // Cartoon continents (Stylized blobs)
+            ctx.fillStyle = '#4CAF50';
+            // North America
+            ctx.beginPath(); ctx.ellipse(250, 150, 120, 80, -0.2, 0, Math.PI * 2); ctx.fill();
+            // South America
+            ctx.beginPath(); ctx.ellipse(320, 370, 80, 110, 0.3, 0, Math.PI * 2); ctx.fill();
+            // Eurasia
+            ctx.beginPath(); ctx.ellipse(680, 140, 220, 90, 0.1, 0, Math.PI * 2); ctx.fill();
+            // Africa
+            ctx.beginPath(); ctx.ellipse(580, 320, 100, 130, 0.1, 0, Math.PI * 2); ctx.fill();
+            // Australia
+            ctx.beginPath(); ctx.ellipse(850, 400, 60, 50, 0, 0, Math.PI * 2); ctx.fill();
 
-            const texture = new THREE.CanvasTexture(canvas);
-            texture.wrapS = THREE.RepeatWrapping;
-            texture.wrapT = THREE.ClampToEdgeWrapping;
-            return texture;
+            // Deserts / Highlights
+            ctx.fillStyle = '#FFEB3B';
+            ctx.beginPath(); ctx.ellipse(600, 280, 40, 30, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.ellipse(720, 180, 50, 30, 0, 0, Math.PI * 2); ctx.fill();
+
+            return new THREE.CanvasTexture(canvas);
         }
 
-        function createDetailedCartoonEarth() {
+        function createCrackBumpTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 512;
+            canvas.height = 256;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Draw jagged dark fault lines resembling image_0.png
+            ctx.strokeStyle = '#000000';
+            ctx.lineWidth = 8;
+            for (let i = 0; i < 12; i++) {
+                ctx.beginPath();
+                let x = Math.random() * canvas.width;
+                let y = 0;
+                ctx.moveTo(x, y);
+                while (y < canvas.height) {
+                    x += (Math.random() - 0.5) * 60;
+                    y += Math.random() * 40;
+                    ctx.lineTo(x, y);
+                }
+                ctx.stroke();
+            }
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        function buildEarthSystem() {
             earthGroup = new THREE.Group();
             scene.add(earthGroup);
 
-            const earthRadius = 4.5;
-            const geometry = new THREE.SphereGeometry(earthRadius, 48, 48);
-            const earthTexture = createDetailedEarthTextures();
-            
-            const material = new THREE.MeshStandardMaterial({
-                map: earthTexture,
-                roughness: 0.85,
-                metalness: 0.05,
+            // 1. Inner Core (Solid White-Hot Metallic Center)
+            const coreGeo = new THREE.SphereGeometry(1.2, 32, 32);
+            const coreMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+            coreMesh = new THREE.Mesh(coreGeo, coreMat);
+            earthGroup.add(coreMesh);
+
+            // Glowing core light
+            const coreLight = new THREE.PointLight(0xffaa00, 2, 10);
+            coreMesh.add(coreLight);
+
+            // 2. Outer Core / Mantle (Vibrant Molten Lava Layer)
+            const mantleGeo = new THREE.SphereGeometry(2.4, 32, 32);
+            const mantleMat = new THREE.MeshStandardMaterial({
+                color: 0xff4500,
+                emissive: 0xff2200,
+                emissiveIntensity: 0.8,
+                roughness: 0.3
             });
+            mantleMesh = new THREE.Mesh(mantleGeo, mantleMat);
+            earthGroup.add(mantleMesh);
 
-            earthMesh = new THREE.Mesh(geometry, material);
-            earthGroup.add(earthMesh);
+            // 3. Cracked Earth Crust (Shards matching image_0.png style)
+            const earthTexture = createCartoonEarthTexture();
+            const crackBump = createCrackBumpTexture();
+            const baseRadius = 3.5;
 
-            const outlineGeo = new THREE.SphereGeometry(earthRadius * 1.025, 32, 32);
-            const outlineMat = new THREE.MeshBasicMaterial({
-                color: 0x2d2d2d,
+            // Create 16 major crust chunks for the explosive fractured sphere effect
+            const shardCount = 16;
+            for (let i = 0; i < shardCount; i++) {
+                // Use spherical distribution to generate distinct crust plates
+                const phi = Math.acos(-1 + (2 * i) / shardCount);
+                const theta = Math.sqrt(shardCount * Math.PI) * phi;
+
+                const shardGeo = new THREE.SphereGeometry(baseRadius, 16, 16, 
+                    (i / shardCount) * Math.PI * 2, (Math.PI * 2) / shardCount + 0.1,
+                    phi - 0.5, 1.0
+                );
+                
+                const shardMat = new THREE.MeshStandardMaterial({
+                    map: earthTexture,
+                    bumpMap: crackBump,
+                    bumpScale: 0.15,
+                    roughness: 0.7,
+                    metalness: 0.1,
+                    side: THREE.DoubleSide
+                });
+
+                const shard = new THREE.Mesh(shardGeo, shardMat);
+                
+                // Store origin direction for magnetic reassembly
+                shard.userData = {
+                    basePosition: shard.position.clone(),
+                    explosionDir: new THREE.Vector3(
+                        (Math.random() - 0.5) * 2,
+                        (Math.random() - 0.5) * 2,
+                        (Math.random() - 0.5) * 2
+                    ).normalize().multiplyScalar(4 + Math.random() * 3),
+                    rotSpeed: new THREE.Vector3(
+                        (Math.random() - 0.5) * 0.05,
+                        (Math.random() - 0.5) * 0.05,
+                        (Math.random() - 0.5) * 0.05
+                    )
+                };
+
+                earthGroup.add(shard);
+                crustShards.push(shard);
+            }
+
+            // 4. Sparse 20% Cloud Layer
+            const cloudGeo = new THREE.SphereGeometry(3.65, 32, 32);
+            const cloudCanvas = document.createElement('canvas');
+            cloudCanvas.width = 512; cloudCanvas.height = 256;
+            const cCtx = cloudCanvas.getContext('2d');
+            cCtx.fillStyle = 'rgba(255,255,255,0)';
+            cCtx.fillRect(0,0,512,256);
+            cCtx.fillStyle = 'rgba(255,255,255,0.85)';
+            // Draw sparse cloud puffs (~20 coverage)
+            for(let c=0; c<15; c++) {
+                cCtx.beginPath();
+                cCtx.arc(Math.random()*512, Math.random()*256, 25 + Math.random()*35, 0, Math.PI*2);
+                cCtx.fill();
+            }
+            const cloudTex = new THREE.CanvasTexture(cloudCanvas);
+            const cloudMat = new THREE.MeshStandardMaterial({
+                map: cloudTex,
+                transparent: true,
+                opacity: 0.7
+            });
+            cloudMesh = new THREE.Mesh(cloudGeo, cloudMat);
+            earthGroup.add(cloudMesh);
+
+            // 5. Atmosphere Glow
+            const atmosGeo = new THREE.SphereGeometry(3.8, 32, 32);
+            const atmosMat = new THREE.MeshBasicMaterial({
+                color: 0x4facfe,
+                transparent: true,
+                opacity: 0.15,
                 side: THREE.BackSide
             });
-            const outlineMesh = new THREE.Mesh(outlineGeo, outlineMat);
-            earthGroup.add(outlineMesh);
+            atmosphereMesh = new THREE.Mesh(atmosGeo, atmosMat);
+            scene.add(atmosphereMesh);
 
-            const cloudsGeo = new THREE.SphereGeometry(earthRadius * 1.07, 32, 32);
-            const cloudsTexture = createSparseCloudsTexture();
-            const cloudsMat = new THREE.MeshStandardMaterial({
-                map: cloudsTexture,
-                transparent: true,
-                opacity: 0.85,
-            });
-            cloudsMesh = new THREE.Mesh(cloudsGeo, cloudsMat);
-            earthGroup.add(cloudsMesh);
-        }
-
-        function createCartoonStars() {
-            const starsGeo = new THREE.BufferGeometry();
-            const starsCount = 150;
-            const positions = new Float32Array(starsCount * 3);
-
-            for (let i = 0; i < starsCount * 3; i += 3) {
-                positions[i] = (Math.random() - 0.5) * 80;
-                positions[i + 1] = (Math.random() - 0.5) * 80;
-                positions[i + 2] = (Math.random() - 0.5) * 80 - 20;
+            // 6. Volcanic Dust Particles
+            const dustGeo = new THREE.BufferGeometry();
+            const dustCount = 300;
+            const dustPositions = new Float32Array(dustCount * 3);
+            for(let i=0; i<dustCount*3; i+=3) {
+                dustPositions[i] = (Math.random() - 0.5) * 10;
+                dustPositions[i+1] = (Math.random() - 0.5) * 10;
+                dustPositions[i+2] = (Math.random() - 0.5) * 10;
             }
-
-            starsGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-            const starsMat = new THREE.PointsMaterial({ color: 0x2d2d2d, size: 1.2, sizeAttenuation: true });
-            starsMesh = new THREE.Points(starsGeo, starsMat);
-            scene.add(starsMesh);
+            dustGeo.setAttribute('position', new THREE.BufferAttribute(dustPositions, 3));
+            const dustMat = new THREE.PointsMaterial({ color: 0xffaa44, size: 0.1, transparent: true, opacity: 0 });
+            dustParticles = new THREE.Points(dustGeo, dustMat);
+            scene.add(dustParticles);
         }
 
-        function createWeatherParticlesSystem() {
-            const particleCount = 400;
-            const geometry = new THREE.BufferGeometry();
-            const positions = new Float32Array(particleCount * 3);
-
-            for (let i = 0; i < particleCount * 3; i += 3) {
-                const u = Math.random();
-                const v = Math.random();
-                const theta = u * 2.0 * Math.PI;
-                const phi = Math.acos(2.0 * v - 1.0);
-                const r = 5.5 + Math.random() * 4.0;
-                
-                positions[i] = r * Math.sin(phi) * Math.cos(theta);
-                positions[i+1] = r * Math.sin(phi) * Math.sin(theta);
-                positions[i+2] = r * Math.cos(phi);
+        function createStarfield() {
+            const starGeo = new THREE.BufferGeometry();
+            const starCount = 800;
+            const starPos = new Float32Array(starCount * 3);
+            for(let i=0; i<starCount*3; i+=3) {
+                starPos[i] = (Math.random() - 0.5) * 200;
+                starPos[i+1] = (Math.random() - 0.5) * 200;
+                starPos[i+2] = (Math.random() - 0.5) * 200;
             }
-
-            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-            
-            const material = new THREE.PointsMaterial({
-                color: 0x3b82f6,
-                size: 0.15,
-                transparent: true,
-                opacity: 0.0
-            });
-
-            weatherParticles = new THREE.Points(geometry, material);
-            scene.add(weatherParticles);
+            starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+            const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.8 });
+            const stars = new THREE.Points(starGeo, starMat);
+            scene.add(stars);
         }
 
+        function setupWeatherSystems() {
+            // Rain Particles
+            const rainGeo = new THREE.BufferGeometry();
+            const rainCount = 500;
+            const rainPos = new Float32Array(rainCount * 3);
+            for(let i=0; i<rainCount*3; i+=3) {
+                rainPos[i] = (Math.random() - 0.5) * 15;
+                rainPos[i+1] = Math.random() * 10 + 5;
+                rainPos[i+2] = (Math.random() - 0.5) * 15;
+            }
+            rainGeo.setAttribute('position', new THREE.BufferAttribute(rainPos, 3));
+            const rainMat = new THREE.PointsMaterial({ color: 0x00aaff, size: 0.1, transparent: true, opacity: 0 });
+            rainSystem = new THREE.Points(rainGeo, rainMat);
+            scene.add(rainSystem);
+
+            // 3D Storm Tornados
+            for(let i=0; i<2; i++) {
+                const tornadoGeo = new THREE.ConeGeometry(0.8, 3, 16, 8, true);
+                const tornadoMat = new THREE.MeshBasicMaterial({ color: 0x555577, wireframe: true, transparent: true, opacity: 0 });
+                const tornado = new THREE.Mesh(tornadoGeo, tornadoMat);
+                tornado.position.set((i === 0 ? 4 : -4), 0, 0);
+                scene.add(tornado);
+                tornados.push(tornado);
+            }
+        }
+
+        // --- Explosion & Magnetic Reassembly Logic ---
         function triggerExplosion() {
-            if (isExploded) return;
+            if (isExploded || reassembling) return;
             isExploded = true;
+            explosionProgress = 0;
+            dustParticles.material.opacity = 0.8;
+            gestureStatusEl.innerText = "Gesture: ERUPTION!";
+            gestureStatusEl.style.background = "rgba(255, 69, 0, 0.4)";
+        }
 
-            // Hide normal Earth components
-            if (earthGroup) earthGroup.visible = false;
+        function triggerReassembly() {
+            if (!isExploded || reassembling) return;
+            reassembling = true;
+            isExploded = false;
+            reassembleTimer = 0;
+            gestureStatusEl.innerText = "Gesture: Magnetic Reassembly";
+            gestureStatusEl.style.background = "rgba(0, 242, 254, 0.4)";
+        }
 
-            // Create explosion debris mesh particles
-            const particleCount = 600;
-            const geom = new THREE.BoxGeometry(0.3, 0.3, 0.3);
-            const mat = new THREE.MeshStandardMaterial({ color: 0x4ade80, roughness: 0.5 });
-            
-            debrisSystem = new THREE.InstancedMesh(geom, mat, particleCount);
-            debrisVelocities = [];
+        // --- Weather Cycling ---
+        function cycleWeather() {
+            const now = Date.now();
+            if (now - lastMiddleFingerTime < 2500) return; // Cooldown
+            lastMiddleFingerTime = now;
 
-            const dummy = new THREE.Object3D();
-            for (let i = 0; i < particleCount; i++) {
-                dummy.position.set(0, 0, 0);
-                dummy.updateMatrix();
-                debrisSystem.setMatrixAt(i, dummy.matrix);
+            if (weatherState === 'normal') {
+                weatherState = 'rain';
+                weatherStatusEl.innerText = "Weather: Raining 🌧️";
+                rainSystem.material.opacity = 0.8;
+            } else if (weatherState === 'rain') {
+                weatherState = 'storm';
+                weatherStatusEl.innerText = "Weather: Storms ⚡🌪️";
+                rainSystem.material.opacity = 0.9;
+                tornados.forEach(t => t.material.opacity = 0.7);
+            } else if (weatherState === 'storm') {
+                weatherState = 'rumble';
+                weatherStatusEl.innerText = "Weather: Rumbling 🌋";
+                tornados.forEach(t => t.material.opacity = 0);
+                rainSystem.material.opacity = 0;
+            } else {
+                weatherState = 'normal';
+                weatherStatusEl.innerText = "Weather: Normal ☀️";
+                rainSystem.material.opacity = 0;
+                tornados.forEach(t => t.material.opacity = 0);
+            }
+        }
 
-                // Random radial explosion velocity
-                const u = Math.random();
-                const v = Math.random();
-                const theta = u * 2.0 * Math.PI;
-                const phi = Math.acos(2.0 * v - 1.0);
-                const speed = 0.15 + Math.random() * 0.35;
+        // --- Hand Tracking & Gesture Classification ---
+        async function initHandTracking() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240 } });
+                videoElement.srcObject = stream;
+                await new Promise((resolve) => { videoElement.onloadedmetadata = () => resolve(); });
+                videoElement.play();
 
-                debrisVelocities.push({
-                    x: speed * Math.sin(phi) * Math.cos(theta),
-                    y: speed * Math.sin(phi) * Math.sin(theta),
-                    z: speed * Math.cos(phi),
-                    rx: (Math.random() - 0.5) * 0.2,
-                    ry: (Math.random() - 0.5) * 0.2
-                });
+                const model = handPoseDetection.SupportedModels.MediaPipeHands;
+                const detectorConfig = {
+                    runtime: 'mediapipe',
+                    solutionPath: 'https://cdn.jsdelivr.net/npm/@mediapipe/hands',
+                    modelType: 'full',
+                    maxHands: 2
+                };
+                detector = await handPoseDetection.createDetector(model, detectorConfig);
+                detectHands();
+            } catch (err) {
+                console.warn("Webcam/Hand tracking unavailable:", err);
+                gestureStatusEl.innerText = "Gesture: Mouse Mode Active";
+            }
+        }
+
+        async function detectHands() {
+            if (detector && videoElement.readyState === 4) {
+                try {
+                    const hands = await detector.estimateHands(videoElement, { flipHorizontal: true });
+                    processGestures(hands);
+                } catch (e) {
+                    console.error(e);
+                }
+            }
+            setTimeout(detectHands, 100);
+        }
+
+        function processGestures(hands) {
+            if (!hands || hands.length === 0) {
+                gestureStatusEl.innerText = "Gesture: No hands detected";
+                return;
             }
 
-            scene.add(debrisSystem);
+            let thumbsDownCount = 0;
+            let middleFingerDetected = false;
+            let openHands = 0;
 
-            document.getElementById('gesture-feedback').innerText = "💥 EARTH EXPLODED! Regenerating...";
-
-            // Auto-regenerate after 3.5 seconds
-            setTimeout(() => {
-                if (debrisSystem) {
-                    scene.remove(debrisSystem);
-                    debrisSystem.geometry.dispose();
-                    debrisSystem.material.dispose();
-                    debrisSystem = null;
+            hands.forEach(hand => {
+                const kp = hand.keypoints;
+                // Check thumb pointing down (tip y > base y)
+                if (kp[4].y > kp[2].y && kp[4].y > kp[3].y) {
+                    thumbsDownCount++;
                 }
-                if (earthGroup) earthGroup.visible = true;
-                isExploded = false;
-                targetQuaternion.identity();
-                document.getElementById('gesture-feedback').innerText = "✨ Earth Regenerated!";
-            }, 3500);
+
+                // Check middle finger extended, others curled
+                const middleExtended = kp[12].y < kp[10].y;
+                const indexCurled = kp[8].y > kp[6].y;
+                const ringCurled = kp[16].y > kp[14].y;
+                if (middleExtended && indexCurled && ringCurled) {
+                    middleFingerDetected = true;
+                }
+
+                // Check open hand (fingers extended)
+                if (kp[8].y < kp[6].y && kp[12].y < kp[10].y) {
+                    openHands++;
+                }
+            });
+
+            // Trigger Thumbs Down Explosion
+            if (thumbsDownCount >= 2) {
+                const now = Date.now();
+                if (!isExploded && !reassembling && now - lastThumbsDownTime > 3000) {
+                    lastThumbsDownTime = now;
+                    triggerExplosion();
+                    setTimeout(triggerReassembly, 4000); // Auto magnetic reassemble after 4s
+                }
+            }
+
+            // Trigger Middle Finger Weather Cycle
+            if (middleFingerDetected) {
+                cycleWeather();
+            }
+
+            // Rotation via open hand position
+            if (openHands > 0 && hands[0]) {
+                const xNorm = (hands[0].keypoints[0].x / 320) - 0.5;
+                const yNorm = (hands[0].keypoints[0].y / 240) - 0.5;
+                targetRotation.y = xNorm * Math.PI;
+                targetRotation.x = yNorm * Math.PI;
+                gestureStatusEl.innerText = "Gesture: Controlling Globe";
+            }
+        }
+
+        // --- Mouse & Window Fallback Controls ---
+        function setupMouseControls() {
+            window.addEventListener('mousedown', (e) => {
+                isDragging = true;
+                previousMousePosition = { x: e.clientX, y: e.clientY };
+            });
+            window.addEventListener('mousemove', (e) => {
+                if (!isDragging) return;
+                const deltaX = e.clientX - previousMousePosition.x;
+                const deltaY = e.clientY - previousMousePosition.y;
+                targetRotation.y += deltaX * 0.005;
+                targetRotation.x += deltaY * 0.005;
+                previousMousePosition = { x: e.clientX, y: e.clientY };
+            });
+            window.addEventListener('mouseup', () => { isDragging = false; });
+            
+            // Click to toggle explosion test
+            window.addEventListener('dblclick', () => {
+                if (!isExploded) {
+                    triggerExplosion();
+                    setTimeout(triggerReassembly, 4000);
+                }
+            });
         }
 
         function onWindowResize() {
@@ -448,424 +609,88 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
         }
 
-        let isDragging = false;
-        let previousMousePosition = { x: 0, y: 0 };
-
-        function setupCameraRelativeDrag() {
-            const dom = renderer.domElement;
-
-            const handlePointerDown = (clientX, clientY) => {
-                isDragging = true;
-                previousMousePosition = { x: clientX, y: clientY };
-            };
-
-            const handlePointerMove = (clientX, clientY) => {
-                if (!isDragging || isExploded) return;
-                const deltaX = clientX - previousMousePosition.x;
-                const deltaY = clientY - previousMousePosition.y;
-
-                const rotationSpeed = 0.005;
-                const qYaw = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), deltaX * rotationSpeed);
-                const qPitch = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), deltaY * rotationSpeed);
-
-                targetQuaternion.multiplyQuaternions(qYaw, targetQuaternion);
-                targetQuaternion.multiplyQuaternions(qPitch, targetQuaternion);
-
-                previousMousePosition = { x: clientX, y: clientY };
-            };
-
-            const handlePointerUp = () => { isDragging = false; };
-
-            dom.addEventListener('mousedown', (e) => handlePointerDown(e.clientX, e.clientY));
-            window.addEventListener('mousemove', (e) => handlePointerMove(e.clientX, e.clientY));
-            window.addEventListener('mouseup', handlePointerUp);
-
-            dom.addEventListener('touchstart', (e) => {
-                if (e.touches.length === 1) handlePointerDown(e.touches[0].clientX, e.touches[0].clientY);
-            }, { passive: true });
-
-            window.addEventListener('touchmove', (e) => {
-                if (e.touches.length === 1) handlePointerMove(e.touches[0].clientX, e.touches[0].clientY);
-            }, { passive: true });
-
-            window.addEventListener('touchend', handlePointerUp);
-
-            window.addEventListener('wheel', (e) => {
-                targetZoom += e.deltaY * 0.005;
-                targetZoom = Math.max(8, Math.min(25, targetZoom));
-            }, { passive: true });
-        }
-
-        async function initTFJSHandDetector() {
-            try {
-                updateStatus('loading', 'Initializing TFJS...', 'Setting up WebGL engine...');
-                await tf.setBackend('webgl');
-                await tf.ready();
-
-                updateStatus('loading', 'Loading Hand Model...', 'Downloading weights...');
-                
-                const model = handPoseDetection.SupportedModels.MediaPipeHands;
-                const detectorConfig = {
-                    runtime: 'mediapipe',
-                    solutionPath: 'https://cdn.jsdelivr.net/npm/@mediapipe/hands',
-                    modelType: 'full',
-                    maxHands: 2
-                };
-
-                handDetector = await handPoseDetection.createDetector(model, detectorConfig);
-                startWebcam();
-            } catch (error) {
-                console.error('TFJS initialization error:', error);
-                updateStatus('error', 'AI Model Failed', 'Switched to Manual Mode');
-                setControlMode('manual');
-            }
-        }
-
-        async function startWebcam() {
-            const videoElement = document.getElementById('webcam');
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({
-                    video: { width: 320, height: 240, frameRate: { ideal: 30 } }
-                });
-                videoElement.srcObject = stream;
-                videoElement.addEventListener('loadeddata', () => {
-                    webcamRunning = true;
-                    updateStatus('ready', 'TFJS Hand Tracking Active', 'Show hands to control Earth!');
-                    predictWebcamLoop();
-                });
-            } catch (err) {
-                console.warn('Webcam error:', err);
-                updateStatus('error', 'Webcam Denied', 'Switched to Manual Mode');
-                setControlMode('manual');
-            }
-        }
-
-        async function predictWebcamLoop(timestamp) {
-            if (!webcamRunning) return;
-
-            if (timestamp - lastFrameTime > 40) {
-                lastFrameTime = timestamp;
-                const videoElement = document.getElementById('webcam');
-                const canvasElement = document.getElementById('output_canvas');
-                const canvasCtx = canvasElement.getContext('2d');
-
-                if (handDetector && videoElement.readyState >= 2) {
-                    try {
-                        const hands = await handDetector.estimateHands(videoElement, { flipHorizontal: false });
-
-                        canvasCtx.save();
-                        canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-
-                        leftHandState = 'none';
-                        rightHandState = 'none';
-                        let middleFingerDetected = false;
-                        let thumbsDownCount = 0;
-
-                        if (hands && hands.length > 0) {
-                            for (let i = 0; i < hands.length; i++) {
-                                const hand = hands[i];
-                                const isUserLeftHand = hand.handedness === 'Right';
-
-                                const gestureResult = analyzeHandGesture(hand.keypoints);
-
-                                if (gestureResult.isMiddleFinger) {
-                                    middleFingerDetected = true;
-                                }
-                                if (gestureResult.isThumbsDown) {
-                                    thumbsDownCount++;
-                                }
-
-                                if (isUserLeftHand) {
-                                    leftHandState = gestureResult.state;
-                                } else {
-                                    rightHandState = gestureResult.state;
-                                }
-
-                                drawHandSkeleton(canvasCtx, hand.keypoints);
-                            }
-                        }
-                        canvasCtx.restore();
-
-                        if (middleFingerDetected) {
-                            const now = Date.now();
-                            if (now - lastMiddleTriggerTime > 1500) {
-                                lastMiddleTriggerTime = now;
-                                cycleWeatherMode();
-                            }
-                        }
-
-                        if (thumbsDownCount >= 2 && !isExploded) {
-                            const now = Date.now();
-                            if (now - lastExplodeTriggerTime > 4000) {
-                                lastExplodeTriggerTime = now;
-                                triggerExplosion();
-                            }
-                        }
-
-                        if (controlMode === 'hands' && !isExploded) {
-                            processGestures();
-                        }
-                    } catch (e) {
-                        console.error('Detection error:', e);
-                    }
-                }
-            }
-
-            requestAnimationFrame(predictWebcamLoop);
-        }
-
-        function analyzeHandGesture(keypoints) {
-            const tips = [4, 8, 12, 16, 20];
-            const pips = [2, 6, 10, 14, 18];
-            const wrist = keypoints[0];
-
-            let extendedCount = 0;
-            const fingerExtended = [];
-
-            for (let i = 1; i < 5; i++) {
-                const tipDist = dist3D(wrist, keypoints[tips[i]]);
-                const pipDist = dist3D(wrist, keypoints[pips[i]]);
-                const isExtended = tipDist > pipDist * 1.15;
-                fingerExtended.push(isExtended);
-                if (isExtended) extendedCount++;
-            }
-
-            const isMiddleFinger = !fingerExtended[0] && fingerExtended[1] && !fingerExtended[2] && !fingerExtended[3];
-            
-            // Thumbs down check: Thumb tip is lower (higher Y value in screen coordinates) than wrist/MCP joint
-            const thumbTip = keypoints[4];
-            const isThumbsDown = thumbTip.y > wrist.y + 10 && extendedCount <= 1;
-
-            let state = 'partial';
-            if (extendedCount >= 3) state = 'open';
-            else if (extendedCount <= 1) state = 'closed';
-
-            return { state, isMiddleFinger, isThumbsDown };
-        }
-
-        function dist3D(p1, p2) {
-            return Math.sqrt(Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2) + Math.pow((p1.z || 0) - (p2.z || 0), 2));
-        }
-
-        function drawHandSkeleton(ctx, keypoints) {
-            ctx.fillStyle = '#ef4444';
-            ctx.strokeStyle = '#f59e0b';
-            ctx.lineWidth = 2;
-
-            const connections = [
-                [0,1],[1,2],[2,3],[3,4],
-                [0,5],[5,6],[6,7],[7,8],
-                [5,9],[9,10],[10,11],[11,12],
-                [9,13],[13,14],[14,15],[15,16],
-                [13,17],[17,18],[18,19],[19,20],[0,17]
-            ];
-
-            connections.forEach(([start, end]) => {
-                const p1 = keypoints[start];
-                const p2 = keypoints[end];
-                if (p1 && p2) {
-                    ctx.beginPath();
-                    ctx.moveTo(p1.x * (ctx.canvas.width / 320), p1.y * (ctx.canvas.height / 240));
-                    ctx.lineTo(p2.x * (ctx.canvas.width / 320), p2.y * (ctx.canvas.height / 240));
-                    ctx.stroke();
-                }
-            });
-        }
-
-        function processGestures() {
-            let feedback = "No hands detected";
-            const speed = 0.025;
-
-            if (leftHandState === 'open' && rightHandState === 'open') {
-                targetZoom -= 0.12;
-                feedback = "👐 Both Open: Magnifying (Zooming In)";
-            }
-            else if (leftHandState === 'closed' && rightHandState === 'closed') {
-                targetZoom += 0.12;
-                feedback = "✊✊ Both Closed: Diverging (Zooming Out)";
-            }
-            else {
-                let qYaw = new THREE.Quaternion();
-                let qPitch = new THREE.Quaternion();
-                let hasMoved = false;
-
-                if (leftHandState === 'open') {
-                    qYaw.setFromAxisAngle(new THREE.Vector3(0, 1, 0), speed);
-                    feedback = "✋ Left Open: Turning Right";
-                    hasMoved = true;
-                } else if (leftHandState === 'closed') {
-                    qYaw.setFromAxisAngle(new THREE.Vector3(0, 1, 0), -speed);
-                    feedback = "✊ Left Closed: Turning Left";
-                    hasMoved = true;
-                }
-
-                if (rightHandState === 'open') {
-                    qPitch.setFromAxisAngle(new THREE.Vector3(1, 0, 0), speed);
-                    feedback = "✋ Right Open: Turning Up";
-                    hasMoved = true;
-                } else if (rightHandState === 'closed') {
-                    qPitch.setFromAxisAngle(new THREE.Vector3(1, 0, 0), -speed);
-                    feedback = "✊ Right Closed: Turning Down";
-                    hasMoved = true;
-                }
-
-                if (hasMoved) {
-                    targetQuaternion.multiplyQuaternions(qYaw, targetQuaternion);
-                    targetQuaternion.multiplyQuaternions(qPitch, targetQuaternion);
-                }
-            }
-
-            targetZoom = Math.max(8, Math.min(25, targetZoom));
-            document.getElementById('gesture-feedback').innerText = feedback;
-        }
-
-        function cycleWeatherMode() {
-            weatherModeIndex = (weatherModeIndex + 1) % weatherModes.length;
-            const mode = weatherModes[weatherModeIndex];
-
-            document.getElementById('weather-text').innerText = mode.name;
-            document.getElementById('weather-icon').setAttribute('data-lucide', mode.icon);
-            lucide.createIcons();
-
-            const uiWrapper = document.getElementById('ui-wrapper');
-
-            if (weatherModeIndex === 0) {
-                scene.background.set('#fdf6e2');
-                scene.fog.color.set('#fdf6e2');
-                weatherParticles.material.opacity = 0.0;
-                uiWrapper.classList.remove('rumble-active');
-            } else if (weatherModeIndex === 1) {
-                scene.background.set('#e0f2fe');
-                scene.fog.color.set('#e0f2fe');
-                weatherParticles.material.color.set(0x38bdf8);
-                weatherParticles.material.opacity = 0.6;
-                uiWrapper.classList.remove('rumble-active');
-            } else if (weatherModeIndex === 2) {
-                scene.background.set('#1e293b');
-                scene.fog.color.set('#1e293b');
-                weatherParticles.material.color.set(0x818cf8);
-                weatherParticles.material.opacity = 0.8;
-                uiWrapper.classList.remove('rumble-active');
-            } else if (weatherModeIndex === 3) {
-                scene.background.set('#450a0a');
-                scene.fog.color.set('#450a0a');
-                weatherParticles.material.color.set(0xfca5a5);
-                weatherParticles.material.opacity = 0.7;
-                uiWrapper.classList.add('rumble-active');
-            }
-        }
-
+        // --- Main Animation Loop ---
         function animate() {
             requestAnimationFrame(animate);
 
-            earthQuaternion.slerp(targetQuaternion, 0.1);
-            currentZoom += (targetZoom - currentZoom) * 0.1;
+            // Smooth damping for rotation
+            globeRotation.x += (targetRotation.x - globeRotation.x) * 0.1;
+            globeRotation.y += (targetRotation.y - globeRotation.y) * 0.1;
+            earthGroup.rotation.x = globeRotation.x;
+            earthGroup.rotation.y = globeRotation.y;
 
-            if (earthGroup) earthGroup.quaternion.copy(earthQuaternion);
-            if (cloudsMesh) cloudsMesh.rotation.y += 0.001;
-            if (starsMesh) starsMesh.rotation.y -= 0.0005;
+            // Continuous slow spin when normal
+            if (!isExploded && !reassembling) {
+                earthGroup.rotation.y += 0.002;
+            }
 
-            // Animate debris if exploded
-            if (isExploded && debrisSystem) {
-                const dummy = new THREE.Object3D();
-                for (let i = 0; i < 600; i++) {
-                    debrisSystem.getMatrixAt(i, dummy.matrix);
-                    dummy.position.setFromMatrixPosition(dummy.matrix);
-                    
-                    const v = debrisVelocities[i];
-                    dummy.position.x += v.x;
-                    dummy.position.y += v.y;
-                    dummy.position.z += v.z;
-                    dummy.rotation.x += v.rx;
-                    dummy.rotation.y += v.ry;
+            // Cloud self-rotation
+            if (cloudMesh) cloudMesh.rotation.y += 0.001;
 
-                    dummy.updateMatrix();
-                    debrisSystem.setMatrixAt(i, dummy.matrix);
+            // Handle Explosion & Magnetic Reassembly Physics
+            if (isExploded && explosionProgress < 1) {
+                explosionProgress += 0.02;
+                crustShards.forEach((shard) => {
+                    shard.position.lerp(shard.userData.explosionDir, 0.08);
+                    shard.rotation.x += shard.userData.rotSpeed.x;
+                    shard.rotation.y += shard.userData.rotSpeed.y;
+                });
+            } else if (reassembling) {
+                reassembleTimer += 0.02;
+                dustParticles.material.opacity = Math.max(0, dustParticles.material.opacity - 0.02);
+                
+                let allInPlace = true;
+                crustShards.forEach((shard) => {
+                    shard.position.lerp(new THREE.Vector3(0,0,0), 0.1);
+                    shard.rotation.x *= 0.9;
+                    shard.rotation.y *= 0.9;
+                    shard.rotation.z *= 0.9;
+                    if (shard.position.length() > 0.1) allInPlace = false;
+                });
+
+                if (allInPlace || reassembleTimer > 3) {
+                    reassembling = false;
+                    crustShards.forEach(shard => shard.position.set(0,0,0));
+                    gestureStatusEl.innerText = "Gesture: Reassembled Successfully!";
+                    gestureStatusEl.style.background = "rgba(255,255,255,0.15)";
                 }
-                debrisSystem.instanceMatrix.needsUpdate = true;
             }
 
-            if (weatherParticles && weatherParticles.material.opacity > 0) {
-                weatherParticles.rotation.y += 0.003;
-                const positions = weatherParticles.geometry.attributes.position.array;
-                for (let i = 1; i < positions.length; i += 3) {
-                    positions[i] -= 0.05;
-                    if (positions[i] < -6) positions[i] = 6;
+            // Weather animation updates
+            if (weatherState === 'rain' || weatherState === 'storm') {
+                const pos = rainSystem.geometry.attributes.position.array;
+                for(let i=1; i<pos.length; i+=3) {
+                    pos[i] -= 0.3;
+                    if (pos[i] < -5) pos[i] = 10;
                 }
-                weatherParticles.geometry.attributes.position.needsUpdate = true;
+                rainSystem.geometry.attributes.position.needsUpdate = true;
             }
 
-            if (weatherModeIndex === 2 && Math.random() < 0.015) {
-                lightningLight.intensity = 3.5;
-                setTimeout(() => { lightningLight.intensity = 0; }, 100);
+            if (weatherState === 'storm') {
+                tornados.forEach((t, idx) => {
+                    t.rotation.y += 0.1;
+                    t.position.x = Math.sin(Date.now() * 0.002 + idx) * 5;
+                    t.position.z = Math.cos(Date.now() * 0.002 + idx) * 5;
+                });
+                // Random lightning flash
+                if (Math.random() < 0.03) {
+                    lightningLight.intensity = 5;
+                    setTimeout(() => lightningLight.intensity = 0, 80);
+                }
             }
 
-            camera.position.z = currentZoom;
+            if (weatherState === 'rumble') {
+                earthGroup.position.x = (Math.random() - 0.5) * 0.1;
+                earthGroup.position.y = (Math.random() - 0.5) * 0.1;
+            } else {
+                earthGroup.position.set(0,0,0);
+            }
+
             renderer.render(scene, camera);
         }
 
-        function updateStatus(state, title, subtitle) {
-            const dot = document.getElementById('status-dot');
-            const titleEl = document.getElementById('status-text');
-            const subEl = document.getElementById('gesture-feedback');
-
-            titleEl.innerText = title;
-            subEl.innerText = subtitle;
-
-            if (state === 'ready') {
-                dot.className = 'w-4 h-4 rounded-full bg-emerald-500 border-2 border-stone-800';
-            } else if (state === 'error') {
-                dot.className = 'w-4 h-4 rounded-full bg-rose-500 border-2 border-stone-800';
-            } else {
-                dot.className = 'w-4 h-4 rounded-full bg-amber-500 border-2 border-stone-800 animate-pulse';
-            }
-        }
-
-        function setControlMode(mode) {
-            controlMode = mode;
-            const modeBtn = document.getElementById('toggle-mode');
-            if (mode === 'hands') {
-                modeBtn.innerText = 'TFJS Hands';
-                modeBtn.className = 'comic-button bg-amber-300 text-stone-900 text-xs font-bold px-2.5 py-1 rounded';
-                updateStatus('ready', 'TFJS Hand Tracking Active', 'Show hands to control Earth!');
-            } else {
-                modeBtn.innerText = 'Manual';
-                modeBtn.className = 'comic-button bg-sky-300 text-stone-900 text-xs font-bold px-2.5 py-1 rounded';
-                updateStatus('ready', 'Manual Control Active', 'Drag mouse anywhere to rotate.');
-                document.getElementById('gesture-feedback').innerText = 'Mouse drag & scroll active';
-            }
-        }
-
-        document.getElementById('toggle-mode').addEventListener('click', () => {
-            setControlMode(controlMode === 'hands' ? 'manual' : 'hands');
-        });
-
-        document.getElementById('btn-reset').addEventListener('click', () => {
-            targetQuaternion.identity();
-            targetZoom = 15;
-            if (isExploded) {
-                // Force reset on explode
-                if (debrisSystem) {
-                    scene.remove(debrisSystem);
-                    debrisSystem.geometry.dispose();
-                    debrisSystem.material.dispose();
-                    debrisSystem = null;
-                }
-                if (earthGroup) earthGroup.visible = true;
-                isExploded = false;
-            }
-        });
-
-        document.getElementById('btn-explode').addEventListener('click', () => {
-            triggerExplosion();
-        });
-
-        window.onload = function() {
-            lucide.createIcons();
-            initThree();
-            initTFJSHandDetector();
-            animate();
-        };
+        // Start everything
+        init();
     </script>
 </body>
 </html>
