@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cartoon Earth - Hand Gesture Controller</title>
+    <!-- Tailwind CSS for modern responsive UI styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Three.js for 3D graphics rendering -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- Google Fonts for comic/hand-drawn typography -->
+    <link href="https://fonts.googleapis.com/css2?family=Comic+Neue:wght@400;700&family=Permanent+Marker&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Comic Neue', cursive, sans-serif;
+            background-color: #fdf6e2;
+            background-image: radial-gradient(#e5d5b5 1px, transparent 1px);
+            background-size: 24px 24px;
+            overflow: hidden;
+        }
+        .comic-border {
+            border: 3px solid #2d2d2d;
+            box-shadow: 4px 4px 0px #2d2d2d;
+            border-radius: 16px;
+        }
+        .comic-button {
+            border: 2px solid #2d2d2d;
+            box-shadow: 3px 3px 0px #2d2d2d;
+            transition: all 0.1s ease;
+        }
+        .comic-button:active {
+            transform: translate(2px, 2px);
+            box-shadow: 1px 1px 0px #2d2d2d;
+        }
+        canvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+        }
+    </style>
+</head>
+<body class="relative w-screen h-screen select-none">
+
+    <!-- 3D Canvas Container -->
+    <div id="canvas-container" class="absolute inset-0 z-0"></div>
+
+    <!-- UI Overlay -->
+    <div class="absolute inset-0 z-10 pointer-events-none flex flex-col justify-between p-4 md:p-6">
+        
+        <!-- Top Header & Status Bar -->
+        <header class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pointer-events-auto">
+            <div class="bg-amber-100 comic-border px-6 py-3">
+                <h1 class="text-2xl md:text-3xl font-bold text-stone-800 tracking-wide" style="font-family: 'Permanent Marker', cursive;">
+                    🌍 Doodle Globe 3D
+                </h1>
+                <p class="text-xs md:text-sm text-stone-600 font-bold">Control planet Earth with your hands or mouse!</p>
+            </div>
+
+            <!-- Status Badge -->
+            <div id="status-card" class="bg-amber-100 comic-border px-4 py-2 flex items-center gap-3">
+                <div id="status-dot" class="w-4 h-4 rounded-full bg-amber-500 border-2 border-stone-800 animate-pulse"></div>
+                <div>
+                    <div id="status-text" class="text-xs font-bold text-stone-800">Initializing AI Model...</div>
+                    <div id="gesture-feedback" class="text-xs text-stone-600 font-semibold">Please allow webcam access</div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Interactive Center / Floating Elements -->
+        <main class="flex-1 flex items-center justify-between pointer-events-none">
+            <!-- Left Side Guide -->
+            <div class="hidden lg:flex flex-col gap-3 bg-amber-50/95 comic-border p-4 pointer-events-auto max-w-xs backdrop-blur-sm">
+                <h3 class="font-bold text-stone-800 border-b-2 border-stone-800 pb-1 flex items-center gap-2">
+                    🖐️ Hand Gestures Guide
+                </h3>
+                <ul class="text-xs space-y-2 text-stone-700 font-medium">
+                    <li class="flex items-center justify-between bg-amber-100/70 p-1.5 rounded border border-stone-300">
+                        <span>✋ <b>Left Open:</b> Turn Left</span>
+                    </li>
+                    <li class="flex items-center justify-between bg-amber-100/70 p-1.5 rounded border border-stone-300">
+                        <span>✊ <b>Left Closed:</b> Turn Right</span>
+                    </li>
+                    <li class="flex items-center justify-between bg-amber-100/70 p-1.5 rounded border border-stone-300">
+                        <span>✋ <b>Right Open:</b> Tilt Up</span>
+                    </li>
+                    <li class="flex items-center justify-between bg-amber-100/70 p-1.5 rounded border border-stone-300">
+                        <span>✊ <b>Right Closed:</b> Tilt Down</span>
+                    </li>
+                    <li class="flex items-center justify-between bg-amber-100/70 p-1.5 rounded border border-stone-300">
+                        <span>👐 <b>Both Open:</b> Magnify (Zoom In)</span>
+                    </li>
+                    <li class="flex items-center justify-between bg-amber-100/70 p-1.5 rounded border border-stone-300">
+                        <span>✊✊ <b>Both Closed:</b> Diverge (Zoom Out)</span>
+                    </li>
+                </ul>
+            </div>
+
+            <!-- Right Bottom Webcam Feed & Controls -->
+            <div class="self-end ml-auto flex flex-col items-end gap-3 pointer-events-auto">
+                <!-- Webcam Video Preview -->
+                <div class="relative w-36 h-28 md:w-48 md:h-36 bg-stone-900 comic-border overflow-hidden">
+                    <video id="webcam" class="w-full h-full object-cover transform -scale-x-100" autoplay playsinline muted></video>
+                    <canvas id="output_canvas" class="absolute inset-0 w-full h-full pointer-events-none transform -scale-x-100 opacity-80"></canvas>
+                    <div class="absolute bottom-1 left-1 bg-amber-200/90 text-stone-900 text-[10px] font-bold px-1.5 py-0.5 rounded border border-stone-800">
+                        WEBCAM FEED
+                    </div>
+                </div>
+
+                <!-- Mode Switcher & Fallback Manual Buttons -->
+                <div class="bg-amber-100 comic-border p-3 flex flex-col gap-2 w-48 md:w-56">
+                    <div class="flex justify-between items-center">
+                        <span class="text-xs font-bold text-stone-800">Control Mode</span>
+                        <button id="toggle-mode" class="comic-button bg-amber-300 text-stone-900 text-xs font-bold px-2.5 py-1 rounded">
+                            Mode: AI Hands
+                        </button>
+                    </div>
+                    <div id="manual-hint" class="text-[11px] text-stone-600 hidden">
+                        Drag mouse or pinch to rotate & zoom.
+                    </div>
+                    <div class="grid grid-cols-2 gap-1.5 pt-1">
+                        <button id="btn-reset" class="comic-button bg-stone-200 hover:bg-stone-300 text-stone-800 text-xs font-bold py-1 px-2 rounded">
+                            Reset View
+                        </button>
+                        <button id="btn-toggle-cam" class="comic-button bg-amber-400 hover:bg-amber-500 text-stone-900 text-xs font-bold py-1 px-2 rounded">
+                            Cam: On
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Footer Note -->
+        <footer class="pointer-events-auto flex justify-center">
+            <div class="bg-amber-100/90 comic-border px-4 py-1 text-xs text-stone-700 font-bold text-center">
+                ✨ Cartoon Sketch Aesthetic • Built with Three.js & MediaPipe Vision Tasks ✨
+            </div>
+        </footer>
+
+    </div>
+
+    <!-- Load MediaPipe Tasks Vision ES Module via browser script bundle -->
+    <script type="module">
+        import { HandLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0";
+
+        // --- 1. THREE.JS CARTOON EARTH SCENE SETUP ---
+        let scene, camera, renderer, earthGroup, earthMesh, cloudsMesh, starsMesh;
+        let targetRotationX = 0, targetRotationY = 0;
+        let currentRotationX = 0, currentRotationY = 0;
+        let targetZoom = 15, currentZoom = 15;
+        
+        let controlMode = 'hands'; // 'hands' or 'manual'
+        let webcamActive = true;
+
+        let leftHandState = 'none'; 
+        let rightHandState = 'none';
+
+        function initThree() {
+            const container = document.getElementById('canvas-container');
+            
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color('#fdf6e2');
+            scene.fog = new THREE.FogExp2('#fdf6e2', 0.015);
+
+            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.z = currentZoom;
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            container.appendChild(renderer.domElement);
+
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.85);
+            scene.add(ambientLight);
+
+            const directionalLight = new THREE.DirectionalLight(0xfffaed, 1.3);
+            directionalLight.position.set(10, 20, 15);
+            scene.add(directionalLight);
+
+            const backLight = new THREE.DirectionalLight(0x7090ff, 0.4);
+            backLight.position.set(-10, -10, -15);
+            scene.add(backLight);
+
+            createCartoonEarth();
+            createCartoonStars();
+
+            window.addEventListener('resize', onWindowResize);
+            setupManualMouseControls();
+        }
+
+        function createCartoonEarthTextures() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 2048;
+            canvas.height = 1024;
+            const ctx = canvas.getContext('2d');
+
+            ctx.fillStyle = '#4da6ff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.strokeStyle = '#2b78e4';
+            ctx.lineWidth = 4;
+            for (let i = 0; i < 200; i++) {
+                let x = Math.random() * canvas.width;
+                let y = Math.random() * canvas.height;
+                ctx.beginPath();
+                ctx.arc(x, y, 10 + Math.random() * 20, 0, Math.PI);
+                ctx.stroke();
+            }
+
+            ctx.fillStyle = '#66cc66';
+            ctx.strokeStyle = '#2d2d2d';
+            ctx.lineWidth = 12;
+            ctx.lineJoin = 'round';
+
+            function drawBlob(cx, cy, radius, points) {
+                ctx.beginPath();
+                for (let i = 0; i < points; i++) {
+                    const angle = (i / points) * Math.PI * 2;
+                    const r = radius * (0.8 + Math.sin(i * 2.5) * 0.3 + Math.cos(i * 1.5) * 0.2);
+                    const x = cx + Math.cos(angle) * r;
+                    const y = cy + Math.sin(angle) * r;
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+            }
+
+            drawBlob(500, 300, 220, 12); 
+            drawBlob(600, 750, 180, 10); 
+            drawBlob(1100, 350, 250, 14); 
+            drawBlob(1250, 700, 160, 10); 
+            drawBlob(1650, 750, 130, 9);  
+            drawBlob(1024, 920, 200, 11); 
+
+            ctx.strokeStyle = '#4da64d';
+            ctx.lineWidth = 4;
+            for (let i = 0; i < 80; i++) {
+                let hx = 200 + Math.random() * 1600;
+                let hy = 150 + Math.random() * 700;
+                ctx.beginPath();
+                ctx.moveTo(hx, hy);
+                ctx.lineTo(hx + 20, hy + 20);
+                ctx.stroke();
+            }
+
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.wrapS = THREE.RepeatWrapping;
+            texture.wrapT = THREE.ClampToEdgeWrapping;
+            return texture;
+        }
+
+        function createCloudsTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 1024;
+            canvas.height = 512;
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+            ctx.strokeStyle = '#2d2d2d';
+            ctx.lineWidth = 6;
+
+            for (let i = 0; i < 35; i++) {
+                let cx = Math.random() * canvas.width;
+                let cy = Math.random() * canvas.height;
+                let r = 40 + Math.random() * 50;
+                ctx.beginPath();
+                ctx.arc(cx, cy, r, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+            }
+
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.wrapS = THREE.RepeatWrapping;
+            texture.wrapT = THREE.ClampToEdgeWrapping;
+            return texture;
+        }
+
+        function createCartoonEarth() {
+            earthGroup = new THREE.Group();
+            scene.add(earthGroup);
+
+            const earthRadius = 4.5;
+            const geometry = new THREE.SphereGeometry(earthRadius, 64, 64);
+            const earthTexture = createCartoonEarthTextures();
+            
+            const material = new THREE.MeshStandardMaterial({
+                map: earthTexture,
+                roughness: 0.8,
+                metalness: 0.1,
+            });
+
+            earthMesh = new THREE.Mesh(geometry, material);
+            earthGroup.add(earthMesh);
+
+            const outlineGeo = new THREE.SphereGeometry(earthRadius * 1.03, 32, 32);
+            const outlineMat = new THREE.MeshBasicMaterial({
+                color: 0x2d2d2d,
+                side: THREE.BackSide
+            });
+            const outlineMesh = new THREE.Mesh(outlineGeo, outlineMat);
+            earthGroup.add(outlineMesh);
+
+            const cloudsGeo = new THREE.SphereGeometry(earthRadius * 1.08, 32, 32);
+            const cloudsTexture = createCloudsTexture();
+            const cloudsMat = new THREE.MeshStandardMaterial({
+                map: cloudsTexture,
+                transparent: true,
+                opacity: 0.85,
+            });
+            cloudsMesh = new THREE.Mesh(cloudsGeo, cloudsMat);
+            earthGroup.add(cloudsMesh);
+        }
+
+        function createCartoonStars() {
+            const starsGeo = new THREE.BufferGeometry();
+            const starsCount = 200;
+            const positions = new Float32Array(starsCount * 3);
+
+            for (let i = 0; i < starsCount * 3; i += 3) {
+                positions[i] = (Math.random() - 0.5) * 80;
+                positions[i + 1] = (Math.random() - 0.5) * 80;
+                positions[i + 2] = (Math.random() - 0.5) * 80 - 20;
+            }
+
+            starsGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            
+            const starsMat = new THREE.PointsMaterial({
+                color: 0x2d2d2d,
+                size: 1.2,
+                sizeAttenuation: true
+            });
+
+            starsMesh = new THREE.Points(starsGeo, starsMat);
+            scene.add(starsMesh);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        let isDragging = false;
+        let previousMousePosition = { x: 0, y: 0 };
+
+        function setupManualMouseControls() {
+            const dom = renderer.domElement;
+
+            dom.addEventListener('mousedown', (e) => {
+                if (controlMode === 'manual') {
+                    isDragging = true;
+                    previousMousePosition = { x: e.clientX, y: e.clientY };
+                }
+            });
+
+            dom.addEventListener('mousemove', (e) => {
+                if (controlMode === 'manual' && isDragging) {
+                    const deltaX = e.clientX - previousMousePosition.x;
+                    const deltaY = e.clientY - previousMousePosition.y;
+
+                    targetRotationY += deltaX * 0.008;
+                    targetRotationX += deltaY * 0.008;
+
+                    previousMousePosition = { x: e.clientX, y: e.clientY };
+                }
+            });
+
+            window.addEventListener('mouseup', () => { isDragging = false; });
+
+            dom.addEventListener('wheel', (e) => {
+                if (controlMode === 'manual') {
+                    targetZoom += e.deltaY * 0.005;
+                    targetZoom = Math.max(8, Math.min(25, targetZoom));
+                }
+            }, { passive: true });
+        }
+
+
+        let handLandmarker = undefined;
+        let webcamRunning = false;
+
+        async function initMediaPipeHands() {
+            try {
+                updateStatus('loading', 'Loading AI Vision Model...', 'Downloading model assets...');
+                
+                const vision = await FilesetResolver.forVisionTasks(
+                    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm"
+                );
+
+                handLandmarker = await HandLandmarker.createFromOptions(vision, {
+                    baseOptions: {
+                        modelAssetPath: `https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task`,
+                        delegate: "GPU"
+                    },
+                    runningMode: "VIDEO",
+                    numHands: 2
+                });
+
+                startWebcam();
+            } catch (error) {
+                console.error('Failed to initialize MediaPipe HandLandmarker:', error);
+                updateStatus('error', 'AI Model Failed', 'Switching to Manual Mode');
+                setControlMode('manual');
+            }
+        }
+
+        async function startWebcam() {
+            const videoElement = document.getElementById('webcam');
+            
+            try {
+                const constraints = {
+                    video: { width: 320, height: 240, frameRate: { ideal: 30 } }
+                };
+                const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                videoElement.srcObject = stream;
+                
+                videoElement.addEventListener('loadeddata', () => {
+                    webcamRunning = true;
+                    updateStatus('ready', 'AI Hand Tracking Active', 'Show your hands to control!');
+                    predictWebcamLoop();
+                });
+            } catch (err) {
+                console.warn('Webcam access error:', err);
+                updateStatus('error', 'Webcam Permission Denied', 'Switching to Manual Mode');
+                setControlMode('manual');
+            }
+        }
+
+        let lastVideoTime = -1;
+        function predictWebcamLoop() {
+            if (!webcamRunning || controlMode !== 'hands') return;
+
+            const videoElement = document.getElementById('webcam');
+            const canvasElement = document.getElementById('output_canvas');
+            const canvasCtx = canvasElement.getContext('2d');
+
+            if (videoElement.currentTime !== lastVideoTime) {
+                lastVideoTime = videoElement.currentTime;
+                
+                if (handLandmarker && videoElement.readyState >= 2) {
+                    const startTimeMs = performance.now();
+                    const results = handLandmarker.detectForVideo(videoElement, startTimeMs);
+
+                    canvasCtx.save();
+                    canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+
+                    leftHandState = 'none';
+                    rightHandState = 'none';
+
+                    if (results.landmarks && results.handedness) {
+                        for (let i = 0; i < results.landmarks.length; i++) {
+                            const landmarks = results.landmarks[i];
+                            const classification = results.handedness[i][0];
+                            
+                            // In mirrored preview, handedness label is inverted ('Left' is user's right hand)
+                            const isUserLeftHand = classification.categoryName === 'Right';
+
+                            const gesture = analyzeHandGesture(landmarks);
+
+                            if (isUserLeftHand) {
+                                leftHandState = gesture;
+                            } else {
+                                rightHandState = gesture;
+                            }
+
+                            drawHandSkeleton(canvasCtx, landmarks);
+                        }
+                    }
+                    canvasCtx.restore();
+
+                    processGestures();
+                }
+            }
+
+            requestAnimationFrame(predictWebcamLoop);
+        }
+
+        function analyzeHandGesture(landmarks) {
+            // Check extension of 4 fingers (Index, Middle, Ring, Pinky) relative to wrist (0)
+            let extendedCount = 0;
+            const tips = [8, 12, 16, 20];
+            const pips = [6, 10, 14, 18];
+
+            for (let i = 0; i < 4; i++) {
+                const tipDist = dist3D(landmarks[0], landmarks[tips[i]]);
+                const pipDist = dist3D(landmarks[0], landmarks[pips[i]]);
+                if (tipDist > pipDist * 1.15) {
+                    extendedCount++;
+                }
+            }
+
+            if (extendedCount >= 3) return 'open';
+            if (extendedCount <= 1) return 'closed';
+            return 'partial';
+        }
+
+        function dist3D(p1, p2) {
+            return Math.sqrt(Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2) + Math.pow(p1.z - p2.z, 2));
+        }
+
+        function drawHandSkeleton(ctx, landmarks) {
+            ctx.fillStyle = '#ef4444';
+            ctx.strokeStyle = '#f59e0b';
+            ctx.lineWidth = 2;
+
+            // Draw connections
+            const connections = [
+                [0,1],[1,2],[2,3],[3,4],       // Thumb
+                [0,5],[5,6],[6,7],[7,8],       // Index
+                [5,9],[9,10],[10,11],[11,12],  // Middle
+                [9,13],[13,14],[14,15],[15,16],// Ring
+                [13,17],[17,18],[18,19],[19,20],// Pinky
+                [0,17]                         // Palm base
+            ];
+
+            connections.forEach(([start, end]) => {
+                const p1 = landmarks[start];
+                const p2 = landmarks[end];
+                ctx.beginPath();
+                ctx.moveTo(p1.x * ctx.canvas.width, p1.y * ctx.canvas.height);
+                ctx.lineTo(p2.x * ctx.canvas.width, p2.y * ctx.canvas.height);
+                ctx.stroke();
+            });
+
+            landmarks.forEach(pt => {
+                ctx.beginPath();
+                ctx.arc(pt.x * ctx.canvas.width, pt.y * ctx.canvas.height, 2, 0, 2 * Math.PI);
+                ctx.fill();
+            });
+        }
+
+
+        function processGestures() {
+            let feedback = "No hands detected";
+
+            // Both Hands Open -> Magnify / Zoom In
+            if (leftHandState === 'open' && rightHandState === 'open') {
+                targetZoom -= 0.12;
+                feedback = "👐 Both Open: Magnifying (Zoom In)";
+            }
+            // Both Hands Closed -> Diverge / Zoom Out
+            else if (leftHandState === 'closed' && rightHandState === 'closed') {
+                targetZoom += 0.12;
+                feedback = "✊✊ Both Closed: Diverging (Zoom Out)";
+            }
+            else {
+                // Left Hand: Open = Turn Left, Closed = Turn Right
+                if (leftHandState === 'open') {
+                    targetRotationY -= 0.035;
+                    feedback = "✋ Left Open: Turning Left";
+                } else if (leftHandState === 'closed') {
+                    targetRotationY += 0.035;
+                    feedback = "✊ Left Closed: Turning Right";
+                }
+
+                // Right Hand: Open = Tilt Up, Closed = Tilt Down
+                if (rightHandState === 'open') {
+                    targetRotationX -= 0.035;
+                    feedback = "✋ Right Open: Tilting Up";
+                } else if (rightHandState === 'closed') {
+                    targetRotationX += 0.035;
+                    feedback = "✊ Right Closed: Tilting Down";
+                }
+            }
+
+            targetZoom = Math.max(8, Math.min(25, targetZoom));
+            document.getElementById('gesture-feedback').innerText = feedback;
+        }
+
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            currentRotationX += (targetRotationX - currentRotationX) * 0.1;
+            currentRotationY += (targetRotationY - currentRotationY) * 0.1;
+            currentZoom += (targetZoom - currentZoom) * 0.1;
+
+            if (earthGroup) {
+                earthGroup.rotation.x = currentRotationX;
+                earthGroup.rotation.y = currentRotationY;
+            }
+
+            if (cloudsMesh) {
+                cloudsMesh.rotation.y += 0.001;
+            }
+
+            if (starsMesh) {
+                starsMesh.rotation.y -= 0.0005;
+            }
+
+            camera.position.z = currentZoom;
+            renderer.render(scene, camera);
+        }
+
+        function updateStatus(state, title, subtitle) {
+            const dot = document.getElementById('status-dot');
+            const titleEl = document.getElementById('status-text');
+            const subEl = document.getElementById('gesture-feedback');
+
+            titleEl.innerText = title;
+            subEl.innerText = subtitle;
+
+            if (state === 'ready') {
+                dot.className = 'w-4 h-4 rounded-full bg-emerald-500 border-2 border-stone-800';
+            } else if (state === 'error') {
+                dot.className = 'w-4 h-4 rounded-full bg-rose-500 border-2 border-stone-800';
+            } else {
+                dot.className = 'w-4 h-4 rounded-full bg-amber-500 border-2 border-stone-800 animate-pulse';
+            }
+        }
+
+        function setControlMode(mode) {
+            controlMode = mode;
+            const modeBtn = document.getElementById('toggle-mode');
+            const manualHint = document.getElementById('manual-hint');
+
+            if (mode === 'hands') {
+                modeBtn.innerText = 'Mode: AI Hands';
+                modeBtn.className = 'comic-button bg-amber-300 text-stone-900 text-xs font-bold px-2.5 py-1 rounded';
+                manualHint.classList.add('hidden');
+                updateStatus('ready', 'AI Hand Tracking Active', 'Show your hands to control!');
+            } else {
+                modeBtn.innerText = 'Mode: Manual';
+                modeBtn.className = 'comic-button bg-sky-300 text-stone-900 text-xs font-bold px-2.5 py-1 rounded';
+                manualHint.classList.remove('hidden');
+                updateStatus('ready', 'Manual Control Active', 'Drag mouse or scroll to interact.');
+                document.getElementById('gesture-feedback').innerText = 'Mouse drag & scroll active';
+            }
+        }
+
+        document.getElementById('toggle-mode').addEventListener('click', () => {
+            setControlMode(controlMode === 'hands' ? 'manual' : 'hands');
+        });
+
+        document.getElementById('btn-reset').addEventListener('click', () => {
+            targetRotationX = 0;
+            targetRotationY = 0;
+            targetZoom = 15;
+        });
+
+        document.getElementById('btn-toggle-cam').addEventListener('click', () => {
+            webcamActive = !webcamActive;
+            const btn = document.getElementById('btn-toggle-cam');
+            const video = document.getElementById('webcam');
+            if (webcamActive) {
+                video.style.display = 'block';
+                btn.innerText = 'Cam: On';
+                btn.className = 'comic-button bg-amber-400 hover:bg-amber-500 text-stone-900 text-xs font-bold py-1 px-2 rounded';
+            } else {
+                video.style.display = 'none';
+                btn.innerText = 'Cam: Off';
+                btn.className = 'comic-button bg-stone-300 hover:bg-stone-400 text-stone-900 text-xs font-bold py-1 px-2 rounded';
+            }
+        });
+
+        window.onload = function() {
+            initThree();
+            initMediaPipeHands();
+            animate();
+        };
+    </script>
+</body>
+</html>
