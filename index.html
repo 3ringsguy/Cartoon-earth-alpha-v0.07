@@ -15,18 +15,14 @@
         }
         #canvas-container {
             position: absolute;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
+            top: 0; left: 0;
+            width: 100vw; height: 100vh;
             z-index: 1;
         }
         #webcam-video {
             position: absolute;
-            bottom: 20px;
-            right: 20px;
-            width: 160px;
-            height: 120px;
+            bottom: 20px; right: 20px;
+            width: 160px; height: 120px;
             border-radius: 12px;
             border: 2px solid rgba(255, 255, 255, 0.3);
             transform: scaleX(-1);
@@ -36,8 +32,7 @@
         }
         #ui-overlay {
             position: absolute;
-            top: 20px;
-            left: 20px;
+            top: 20px; left: 20px;
             z-index: 10;
             color: white;
             pointer-events: none;
@@ -60,17 +55,16 @@
         }
         #controls-panel {
             position: absolute;
-            bottom: 20px;
-            left: 20px;
+            bottom: 20px; left: 20px;
             z-index: 10;
-            background: rgba(10, 10, 25, 0.7);
+            background: rgba(10, 10, 25, 0.75);
             padding: 15px;
             border-radius: 12px;
             border: 1px solid rgba(255, 255, 255, 0.15);
             backdrop-filter: blur(10px);
             color: white;
             font-size: 13px;
-            max-width: 280px;
+            max-width: 300px;
         }
         #controls-panel h3 {
             margin: 0 0 8px 0;
@@ -82,12 +76,11 @@
             padding-left: 18px;
         }
         #controls-panel li {
-            margin-bottom: 4px;
+            margin-bottom: 5px;
         }
         #loading {
             position: absolute;
-            top: 50%;
-            left: 50%;
+            top: 50%; left: 50%;
             transform: translate(-50%, -50%);
             z-index: 100;
             color: white;
@@ -100,8 +93,7 @@
             box-shadow: 0 10px 30px rgba(0,0,0,0.5);
         }
         .spinner {
-            width: 40px;
-            height: 40px;
+            width: 40px; height: 40px;
             border: 4px solid rgba(255,255,255,0.1);
             border-top: 4px solid #4facfe;
             border-radius: 50%;
@@ -122,23 +114,23 @@
 
     <div id="ui-overlay">
         <h1>Cartoon Earth Simulation</h1>
-        <div id="weather-status" class="status-badge">Weather: Normal</div>
+        <div id="weather-status" class="status-badge">Weather: Normal ☀️</div>
         <div id="gesture-status" class="status-badge">Gesture: Tracking...</div>
     </div>
 
     <div id="controls-panel">
         <h3>Gesture Controls</h3>
         <ul>
-            <li><b>Open/Close Hand:</b> Rotate & Scale Globe</li>
-            <li><b>Middle Finger:</b> Cycle Weather (Normal ➔ Rain ➔ Storm ➔ Rumble)</li>
-            <li><b>Double Thumbs Down:</b> Fracture & Magma Eruption ➔ Magnetic Reassembly</li>
+            <li><b>Open Hand:</b> Rotate Globe</li>
+            <li><b>Closed Fist:</b> Scale Globe</li>
+            <li><b>Middle Finger:</b> Cycle Weather</li>
+            <li><b>Double Thumbs Down:</b> Crack → Explode → Magnetic Reassembly</li>
         </ul>
     </div>
 
     <video id="webcam-video" autoplay playsinline muted></video>
     <div id="canvas-container"></div>
 
-    <!-- External Libraries via CDN -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core@3.21.0/dist/tf-core.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl@3.21.0/dist/tf-backend-webgl.min.js"></script>
@@ -146,33 +138,33 @@
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands"></script>
 
     <script>
-        // --- Application State ---
         let scene, camera, renderer, earthGroup, cloudMesh, atmosphereMesh;
-        let crustShards = [], coreMesh, mantleMesh, dustParticles, tornados = [];
-        let weatherState = 'normal'; // normal, rain, storm, rumble
-        let isExploded = false;
-        let explosionProgress = 0;
-        let reassembling = false;
-        let reassembleTimer = 0;
+        let crustShards = [], coreMesh, mantleMesh, dustParticles, debrisParticles;
+        let tornados = [], tornadoParticles = [];
+        let weatherState = 'normal';
+        let isExploded = false, isCracking = false;
+        let explosionProgress = 0, crackProgress = 0;
+        let reassembling = false, reassembleTimer = 0;
         
         let detector = null;
         let videoElement = document.getElementById('webcam-video');
         let weatherStatusEl = document.getElementById('weather-status');
         let gestureStatusEl = document.getElementById('gesture-status');
 
-        // Interaction state
-        let globeRotation = { x: 0.2, y: 0 };
-        let targetRotation = { x: 0.2, y: 0 };
+        let globeRotation = { x: 0.25, y: 0 };
+        let targetRotation = { x: 0.25, y: 0 };
+        let targetScale = 1.0;
+        let currentScale = 1.0;
         let isDragging = false;
         let previousMousePosition = { x: 0, y: 0 };
         let lastMiddleFingerTime = 0;
         let lastThumbsDownTime = 0;
 
-        // Weather particle systems
-        let rainSystem, snowSystem, lightningLight;
+        let rainSystem, lightningLight;
+        let rumbleIntensity = 0;
+        let shakeOffset = new THREE.Vector3();
 
         async function init() {
-            // 1. Setup Three.js Scene
             const container = document.getElementById('canvas-container');
             scene = new THREE.Scene();
             
@@ -185,92 +177,141 @@
             renderer.shadowMap.enabled = true;
             container.appendChild(renderer.domElement);
 
-            // Lighting
-            const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
             scene.add(ambientLight);
 
-            const sunLight = new THREE.DirectionalLight(0xffffff, 1.5);
-            sunLight.position.set(15, 10, 15);
+            const sunLight = new THREE.DirectionalLight(0xfff5e0, 1.6);
+            sunLight.position.set(18, 12, 15);
             scene.add(sunLight);
 
-            lightningLight = new THREE.PointLight(0x00ffff, 0, 50);
+            lightningLight = new THREE.PointLight(0xaaccff, 0, 60);
             lightningLight.position.set(0, 0, 0);
             scene.add(lightningLight);
 
-            // Create Starfield Background
             createStarfield();
-
-            // Build Earth & Layers
             buildEarthSystem();
-
-            // Setup Weather Systems
             setupWeatherSystems();
 
-            // Event Listeners
             window.addEventListener('resize', onWindowResize);
             setupMouseControls();
 
-            // Initialize Webcam & Hand Detector
             await initHandTracking();
-
-            // Remove loading screen
             document.getElementById('loading').style.display = 'none';
-
-            // Start Animation Loop
             animate();
         }
 
-        // --- Procedural Textures & Earth Generation ---
+        // ---------- Improved Cartoon Earth Texture ----------
         function createCartoonEarthTexture() {
             const canvas = document.createElement('canvas');
-            canvas.width = 1024;
-            canvas.height = 512;
+            canvas.width = 2048;
+            canvas.height = 1024;
             const ctx = canvas.getContext('2d');
 
-            // Ocean background
-            ctx.fillStyle = '#2196F3';
+            // Deep ocean gradient
+            const oceanGrad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            oceanGrad.addColorStop(0, '#0a3d6e');
+            oceanGrad.addColorStop(0.5, '#1a6bb5');
+            oceanGrad.addColorStop(1, '#0a3d6e');
+            ctx.fillStyle = oceanGrad;
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // Cartoon continents (Stylized blobs)
-            ctx.fillStyle = '#4CAF50';
-            // North America
-            ctx.beginPath(); ctx.ellipse(250, 150, 120, 80, -0.2, 0, Math.PI * 2); ctx.fill();
-            // South America
-            ctx.beginPath(); ctx.ellipse(320, 370, 80, 110, 0.3, 0, Math.PI * 2); ctx.fill();
-            // Eurasia
-            ctx.beginPath(); ctx.ellipse(680, 140, 220, 90, 0.1, 0, Math.PI * 2); ctx.fill();
-            // Africa
-            ctx.beginPath(); ctx.ellipse(580, 320, 100, 130, 0.1, 0, Math.PI * 2); ctx.fill();
-            // Australia
-            ctx.beginPath(); ctx.ellipse(850, 400, 60, 50, 0, 0, Math.PI * 2); ctx.fill();
+            // Soft ocean glow
+            ctx.fillStyle = 'rgba(30, 140, 220, 0.25)';
+            ctx.beginPath(); ctx.ellipse(1024, 512, 900, 420, 0, 0, Math.PI * 2); ctx.fill();
 
-            // Deserts / Highlights
-            ctx.fillStyle = '#FFEB3B';
-            ctx.beginPath(); ctx.ellipse(600, 280, 40, 30, 0, 0, Math.PI * 2); ctx.fill();
-            ctx.beginPath(); ctx.ellipse(720, 180, 50, 30, 0, 0, Math.PI * 2); ctx.fill();
+            // Polar ice caps
+            ctx.fillStyle = '#e8f4ff';
+            ctx.beginPath(); ctx.ellipse(1024, 80, 700, 90, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.ellipse(1024, 944, 650, 80, 0, 0, Math.PI * 2); ctx.fill();
+
+            // Helper for soft blob continents
+            function drawContinent(cx, cy, points, color) {
+                ctx.fillStyle = color;
+                ctx.beginPath();
+                ctx.moveTo(cx + points[0][0], cy + points[0][1]);
+                for (let i = 1; i < points.length; i++) {
+                    ctx.lineTo(cx + points[i][0], cy + points[i][1]);
+                }
+                ctx.closePath();
+                ctx.fill();
+            }
+
+            // North America
+            drawContinent(420, 320, [
+                [-90,-70],[-40,-110],[50,-100],[110,-50],[100,20],[60,80],[0,110],[-70,90],[-120,40],[-110,-20]
+            ], '#4caf50');
+            // South America
+            drawContinent(520, 620, [
+                [-40,-90],[20,-100],[50,-40],[40,40],[10,100],[-30,120],[-60,70],[-70,0],[-50,-50]
+            ], '#66bb6a');
+            // Europe + Asia (Eurasia)
+            drawContinent(1180, 300, [
+                [-180,-80],[-80,-110],[40,-100],[160,-70],[220,-20],[200,40],[120,90],[20,100],[-80,80],[-160,40],[-200,-10]
+            ], '#43a047');
+            // Africa
+            drawContinent(980, 520, [
+                [-70,-110],[-20,-120],[50,-100],[80,-40],[70,50],[30,120],[-30,130],[-70,70],[-90,0],[-80,-50]
+            ], '#558b2f');
+            // Australia
+            drawContinent(1550, 700, [
+                [-55,-40],[10,-55],[60,-30],[55,20],[20,50],[-30,45],[-60,10]
+            ], '#7cb342');
+            // Greenland
+            drawContinent(380, 160, [[-40,-30],[20,-35],[45,0],[20,40],[-30,35],[-50,5]], '#a5d6a7');
+            // Antarctica hint
+            ctx.fillStyle = '#cfd8dc';
+            ctx.beginPath(); ctx.ellipse(1024, 960, 400, 50, 0, 0, Math.PI * 2); ctx.fill();
+
+            // Deserts
+            ctx.fillStyle = '#ffd54f';
+            ctx.beginPath(); ctx.ellipse(1050, 480, 55, 40, 0.2, 0, Math.PI * 2); ctx.fill(); // Sahara
+            ctx.beginPath(); ctx.ellipse(1300, 340, 70, 35, -0.1, 0, Math.PI * 2); ctx.fill(); // Central Asia
+            ctx.beginPath(); ctx.ellipse(1580, 680, 35, 25, 0, 0, Math.PI * 2); ctx.fill(); // Australia
+
+            // Soft mountain highlights
+            ctx.fillStyle = 'rgba(255,255,255,0.25)';
+            ctx.beginPath(); ctx.ellipse(420, 280, 40, 25, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.ellipse(1200, 260, 80, 30, 0, 0, Math.PI * 2); ctx.fill();
 
             return new THREE.CanvasTexture(canvas);
         }
 
-        function createCrackBumpTexture() {
+        function createCrackTexture() {
             const canvas = document.createElement('canvas');
-            canvas.width = 512;
-            canvas.height = 256;
+            canvas.width = 1024;
+            canvas.height = 512;
             const ctx = canvas.getContext('2d');
             ctx.fillStyle = '#ffffff';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // Draw jagged dark fault lines resembling image_0.png
-            ctx.strokeStyle = '#000000';
-            ctx.lineWidth = 8;
-            for (let i = 0; i < 12; i++) {
+            ctx.strokeStyle = '#111111';
+            ctx.lineWidth = 6;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+
+            // Major tectonic-style cracks
+            for (let i = 0; i < 18; i++) {
                 ctx.beginPath();
                 let x = Math.random() * canvas.width;
-                let y = 0;
+                let y = Math.random() * canvas.height;
                 ctx.moveTo(x, y);
-                while (y < canvas.height) {
-                    x += (Math.random() - 0.5) * 60;
-                    y += Math.random() * 40;
+                for (let j = 0; j < 12; j++) {
+                    x += (Math.random() - 0.5) * 90;
+                    y += (Math.random() - 0.5) * 70;
+                    ctx.lineTo(x, y);
+                }
+                ctx.stroke();
+            }
+            // Secondary thinner cracks
+            ctx.lineWidth = 2.5;
+            for (let i = 0; i < 30; i++) {
+                ctx.beginPath();
+                let x = Math.random() * canvas.width;
+                let y = Math.random() * canvas.height;
+                ctx.moveTo(x, y);
+                for (let j = 0; j < 6; j++) {
+                    x += (Math.random() - 0.5) * 50;
+                    y += (Math.random() - 0.5) * 40;
                     ctx.lineTo(x, y);
                 }
                 ctx.stroke();
@@ -282,172 +323,252 @@
             earthGroup = new THREE.Group();
             scene.add(earthGroup);
 
-            // 1. Inner Core (Solid White-Hot Metallic Center)
-            const coreGeo = new THREE.SphereGeometry(1.2, 32, 32);
-            const coreMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+            // Inner Core
+            const coreGeo = new THREE.SphereGeometry(1.15, 32, 32);
+            const coreMat = new THREE.MeshBasicMaterial({ color: 0xfff8e1 });
             coreMesh = new THREE.Mesh(coreGeo, coreMat);
             earthGroup.add(coreMesh);
 
-            // Glowing core light
-            const coreLight = new THREE.PointLight(0xffaa00, 2, 10);
+            const coreLight = new THREE.PointLight(0xffaa33, 2.5, 12);
             coreMesh.add(coreLight);
 
-            // 2. Outer Core / Mantle (Vibrant Molten Lava Layer)
-            const mantleGeo = new THREE.SphereGeometry(2.4, 32, 32);
+            // Mantle / Magma
+            const mantleGeo = new THREE.SphereGeometry(2.35, 48, 48);
             const mantleMat = new THREE.MeshStandardMaterial({
-                color: 0xff4500,
+                color: 0xff3300,
                 emissive: 0xff2200,
-                emissiveIntensity: 0.8,
-                roughness: 0.3
+                emissiveIntensity: 0.9,
+                roughness: 0.35,
+                metalness: 0.2
             });
             mantleMesh = new THREE.Mesh(mantleGeo, mantleMat);
             earthGroup.add(mantleMesh);
 
-            // 3. Cracked Earth Crust (Shards matching image_0.png style)
+            // Crust shards – better spherical distribution (Solar Smash style)
             const earthTexture = createCartoonEarthTexture();
-            const crackBump = createCrackBumpTexture();
-            const baseRadius = 3.5;
+            const crackBump = createCrackTexture();
+            const baseRadius = 3.55;
+            const shardCount = 24;
 
-            // Create 16 major crust chunks for the explosive fractured sphere effect
-            const shardCount = 16;
             for (let i = 0; i < shardCount; i++) {
-                // Use spherical distribution to generate distinct crust plates
-                const phi = Math.acos(-1 + (2 * i) / shardCount);
-                const theta = Math.sqrt(shardCount * Math.PI) * phi;
+                // Fibonacci sphere distribution for even coverage
+                const y = 1 - (i / (shardCount - 1)) * 2;
+                const radiusAtY = Math.sqrt(1 - y * y);
+                const theta = Math.PI * (3 - Math.sqrt(5)) * i;
 
-                const shardGeo = new THREE.SphereGeometry(baseRadius, 16, 16, 
-                    (i / shardCount) * Math.PI * 2, (Math.PI * 2) / shardCount + 0.1,
-                    phi - 0.5, 1.0
+                const phiStart = Math.acos(Math.max(-1, Math.min(1, y - 0.22)));
+                const phiLength = 0.55;
+                const thetaStart = theta;
+                const thetaLength = (Math.PI * 2) / 7 + 0.12;
+
+                const shardGeo = new THREE.SphereGeometry(
+                    baseRadius, 12, 10,
+                    thetaStart, thetaLength,
+                    phiStart, phiLength
                 );
-                
+
                 const shardMat = new THREE.MeshStandardMaterial({
                     map: earthTexture,
                     bumpMap: crackBump,
-                    bumpScale: 0.15,
-                    roughness: 0.7,
-                    metalness: 0.1,
+                    bumpScale: 0.18,
+                    roughness: 0.65,
+                    metalness: 0.08,
                     side: THREE.DoubleSide
                 });
 
                 const shard = new THREE.Mesh(shardGeo, shardMat);
-                
-                // Store origin direction for magnetic reassembly
+
+                // Store original transform data for reassembly
+                const dir = new THREE.Vector3(
+                    Math.cos(theta) * radiusAtY,
+                    y,
+                    Math.sin(theta) * radiusAtY
+                ).normalize();
+
                 shard.userData = {
-                    basePosition: shard.position.clone(),
-                    explosionDir: new THREE.Vector3(
-                        (Math.random() - 0.5) * 2,
-                        (Math.random() - 0.5) * 2,
-                        (Math.random() - 0.5) * 2
-                    ).normalize().multiplyScalar(4 + Math.random() * 3),
+                    originalDir: dir.clone(),
+                    explosionDir: dir.clone().multiplyScalar(5.5 + Math.random() * 4.5),
                     rotSpeed: new THREE.Vector3(
-                        (Math.random() - 0.5) * 0.05,
-                        (Math.random() - 0.5) * 0.05,
-                        (Math.random() - 0.5) * 0.05
-                    )
+                        (Math.random() - 0.5) * 0.12,
+                        (Math.random() - 0.5) * 0.12,
+                        (Math.random() - 0.5) * 0.08
+                    ),
+                    baseScale: 1
                 };
 
                 earthGroup.add(shard);
                 crustShards.push(shard);
             }
 
-            // 4. Sparse 20% Cloud Layer
-            const cloudGeo = new THREE.SphereGeometry(3.65, 32, 32);
+            // Clouds (~20% coverage)
+            const cloudGeo = new THREE.SphereGeometry(3.72, 48, 48);
             const cloudCanvas = document.createElement('canvas');
-            cloudCanvas.width = 512; cloudCanvas.height = 256;
+            cloudCanvas.width = 1024; cloudCanvas.height = 512;
             const cCtx = cloudCanvas.getContext('2d');
             cCtx.fillStyle = 'rgba(255,255,255,0)';
-            cCtx.fillRect(0,0,512,256);
-            cCtx.fillStyle = 'rgba(255,255,255,0.85)';
-            // Draw sparse cloud puffs (~20 coverage)
-            for(let c=0; c<15; c++) {
+            cCtx.fillRect(0, 0, 1024, 512);
+            cCtx.fillStyle = 'rgba(255,255,255,0.82)';
+            for (let c = 0; c < 28; c++) {
+                const x = Math.random() * 1024;
+                const y = Math.random() * 512;
+                const r = 18 + Math.random() * 45;
                 cCtx.beginPath();
-                cCtx.arc(Math.random()*512, Math.random()*256, 25 + Math.random()*35, 0, Math.PI*2);
+                cCtx.arc(x, y, r, 0, Math.PI * 2);
+                cCtx.fill();
+                // soft secondary puff
+                cCtx.beginPath();
+                cCtx.arc(x + (Math.random()-0.5)*30, y + (Math.random()-0.5)*20, r * 0.6, 0, Math.PI * 2);
                 cCtx.fill();
             }
             const cloudTex = new THREE.CanvasTexture(cloudCanvas);
             const cloudMat = new THREE.MeshStandardMaterial({
                 map: cloudTex,
                 transparent: true,
-                opacity: 0.7
+                opacity: 0.65,
+                depthWrite: false
             });
             cloudMesh = new THREE.Mesh(cloudGeo, cloudMat);
             earthGroup.add(cloudMesh);
 
-            // 5. Atmosphere Glow
-            const atmosGeo = new THREE.SphereGeometry(3.8, 32, 32);
+            // Atmosphere
+            const atmosGeo = new THREE.SphereGeometry(3.95, 48, 48);
             const atmosMat = new THREE.MeshBasicMaterial({
                 color: 0x4facfe,
                 transparent: true,
-                opacity: 0.15,
+                opacity: 0.14,
                 side: THREE.BackSide
             });
             atmosphereMesh = new THREE.Mesh(atmosGeo, atmosMat);
             scene.add(atmosphereMesh);
 
-            // 6. Volcanic Dust Particles
+            // Volcanic dust
             const dustGeo = new THREE.BufferGeometry();
-            const dustCount = 300;
-            const dustPositions = new Float32Array(dustCount * 3);
-            for(let i=0; i<dustCount*3; i+=3) {
-                dustPositions[i] = (Math.random() - 0.5) * 10;
-                dustPositions[i+1] = (Math.random() - 0.5) * 10;
-                dustPositions[i+2] = (Math.random() - 0.5) * 10;
+            const dustCount = 450;
+            const dustPos = new Float32Array(dustCount * 3);
+            for (let i = 0; i < dustCount * 3; i += 3) {
+                dustPos[i] = (Math.random() - 0.5) * 14;
+                dustPos[i+1] = (Math.random() - 0.5) * 14;
+                dustPos[i+2] = (Math.random() - 0.5) * 14;
             }
-            dustGeo.setAttribute('position', new THREE.BufferAttribute(dustPositions, 3));
-            const dustMat = new THREE.PointsMaterial({ color: 0xffaa44, size: 0.1, transparent: true, opacity: 0 });
+            dustGeo.setAttribute('position', new THREE.BufferAttribute(dustPos, 3));
+            const dustMat = new THREE.PointsMaterial({
+                color: 0xff9944,
+                size: 0.12,
+                transparent: true,
+                opacity: 0,
+                depthWrite: false
+            });
             dustParticles = new THREE.Points(dustGeo, dustMat);
             scene.add(dustParticles);
+
+            // Explosion debris
+            const debrisGeo = new THREE.BufferGeometry();
+            const debrisCount = 200;
+            const debrisPos = new Float32Array(debrisCount * 3);
+            const debrisVel = [];
+            for (let i = 0; i < debrisCount; i++) {
+                debrisPos[i*3] = 0; debrisPos[i*3+1] = 0; debrisPos[i*3+2] = 0;
+                debrisVel.push(new THREE.Vector3(
+                    (Math.random() - 0.5) * 0.35,
+                    (Math.random() - 0.5) * 0.35,
+                    (Math.random() - 0.5) * 0.35
+                ));
+            }
+            debrisGeo.setAttribute('position', new THREE.BufferAttribute(debrisPos, 3));
+            const debrisMat = new THREE.PointsMaterial({
+                color: 0xff6622,
+                size: 0.18,
+                transparent: true,
+                opacity: 0,
+                depthWrite: false
+            });
+            debrisParticles = new THREE.Points(debrisGeo, debrisMat);
+            debrisParticles.userData.velocities = debrisVel;
+            scene.add(debrisParticles);
         }
 
         function createStarfield() {
             const starGeo = new THREE.BufferGeometry();
-            const starCount = 800;
+            const starCount = 1200;
             const starPos = new Float32Array(starCount * 3);
-            for(let i=0; i<starCount*3; i+=3) {
-                starPos[i] = (Math.random() - 0.5) * 200;
-                starPos[i+1] = (Math.random() - 0.5) * 200;
-                starPos[i+2] = (Math.random() - 0.5) * 200;
+            for (let i = 0; i < starCount * 3; i += 3) {
+                starPos[i] = (Math.random() - 0.5) * 280;
+                starPos[i+1] = (Math.random() - 0.5) * 280;
+                starPos[i+2] = (Math.random() - 0.5) * 280;
             }
             starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
-            const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.8 });
-            const stars = new THREE.Points(starGeo, starMat);
-            scene.add(stars);
+            const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.7, sizeAttenuation: true });
+            scene.add(new THREE.Points(starGeo, starMat));
         }
 
         function setupWeatherSystems() {
-            // Rain Particles
+            // Smooth rain
             const rainGeo = new THREE.BufferGeometry();
-            const rainCount = 500;
+            const rainCount = 800;
             const rainPos = new Float32Array(rainCount * 3);
-            for(let i=0; i<rainCount*3; i+=3) {
-                rainPos[i] = (Math.random() - 0.5) * 15;
-                rainPos[i+1] = Math.random() * 10 + 5;
-                rainPos[i+2] = (Math.random() - 0.5) * 15;
+            const rainVel = new Float32Array(rainCount);
+            for (let i = 0; i < rainCount; i++) {
+                rainPos[i*3] = (Math.random() - 0.5) * 18;
+                rainPos[i*3+1] = Math.random() * 16 - 2;
+                rainPos[i*3+2] = (Math.random() - 0.5) * 18;
+                rainVel[i] = 0.18 + Math.random() * 0.22;
             }
             rainGeo.setAttribute('position', new THREE.BufferAttribute(rainPos, 3));
-            const rainMat = new THREE.PointsMaterial({ color: 0x00aaff, size: 0.1, transparent: true, opacity: 0 });
+            rainGeo.userData = { velocities: rainVel };
+            const rainMat = new THREE.PointsMaterial({
+                color: 0x88ccff,
+                size: 0.08,
+                transparent: true,
+                opacity: 0,
+                depthWrite: false
+            });
             rainSystem = new THREE.Points(rainGeo, rainMat);
             scene.add(rainSystem);
 
-            // 3D Storm Tornados
-            for(let i=0; i<2; i++) {
-                const tornadoGeo = new THREE.ConeGeometry(0.8, 3, 16, 8, true);
-                const tornadoMat = new THREE.MeshBasicMaterial({ color: 0x555577, wireframe: true, transparent: true, opacity: 0 });
-                const tornado = new THREE.Mesh(tornadoGeo, tornadoMat);
-                tornado.position.set((i === 0 ? 4 : -4), 0, 0);
-                scene.add(tornado);
-                tornados.push(tornado);
+            // Realistic tornadoes (funnel + particle swirl)
+            for (let t = 0; t < 2; t++) {
+                const funnelGeo = new THREE.CylinderGeometry(0.15, 1.4, 4.2, 24, 12, true);
+                const funnelMat = new THREE.MeshBasicMaterial({
+                    color: 0x667788,
+                    transparent: true,
+                    opacity: 0,
+                    side: THREE.DoubleSide,
+                    wireframe: false
+                });
+                // Make it look more like a vortex by stretching UVs conceptually via scale
+                const funnel = new THREE.Mesh(funnelGeo, funnelMat);
+                funnel.position.set(t === 0 ? 5.5 : -5.5, 0.8, 0);
+                funnel.userData = { baseX: funnel.position.x, phase: t * Math.PI };
+                scene.add(funnel);
+                tornados.push(funnel);
+
+                // Dust particles around each tornado
+                const pGeo = new THREE.BufferGeometry();
+                const pCount = 120;
+                const pPos = new Float32Array(pCount * 3);
+                for (let i = 0; i < pCount * 3; i++) pPos[i] = 0;
+                pGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
+                const pMat = new THREE.PointsMaterial({
+                    color: 0x998877,
+                    size: 0.09,
+                    transparent: true,
+                    opacity: 0,
+                    depthWrite: false
+                });
+                const particles = new THREE.Points(pGeo, pMat);
+                particles.userData = { parent: funnel, count: pCount };
+                scene.add(particles);
+                tornadoParticles.push(particles);
             }
         }
 
-        // --- Explosion & Magnetic Reassembly Logic ---
-        function triggerExplosion() {
-            if (isExploded || reassembling) return;
-            isExploded = true;
-            explosionProgress = 0;
-            dustParticles.material.opacity = 0.8;
-            gestureStatusEl.innerText = "Gesture: ERUPTION!";
-            gestureStatusEl.style.background = "rgba(255, 69, 0, 0.4)";
+        // ---------- Explosion / Crack / Reassembly ----------
+        function triggerCrackAndExplosion() {
+            if (isExploded || isCracking || reassembling) return;
+            isCracking = true;
+            crackProgress = 0;
+            gestureStatusEl.innerText = "Gesture: CRACKING...";
+            gestureStatusEl.style.background = "rgba(255, 140, 0, 0.45)";
         }
 
         function triggerReassembly() {
@@ -456,43 +577,47 @@
             isExploded = false;
             reassembleTimer = 0;
             gestureStatusEl.innerText = "Gesture: Magnetic Reassembly";
-            gestureStatusEl.style.background = "rgba(0, 242, 254, 0.4)";
+            gestureStatusEl.style.background = "rgba(0, 242, 254, 0.45)";
         }
 
-        // --- Weather Cycling ---
         function cycleWeather() {
             const now = Date.now();
-            if (now - lastMiddleFingerTime < 2500) return; // Cooldown
+            if (now - lastMiddleFingerTime < 2200) return;
             lastMiddleFingerTime = now;
 
             if (weatherState === 'normal') {
                 weatherState = 'rain';
                 weatherStatusEl.innerText = "Weather: Raining 🌧️";
-                rainSystem.material.opacity = 0.8;
+                rainSystem.material.opacity = 0.75;
             } else if (weatherState === 'rain') {
                 weatherState = 'storm';
                 weatherStatusEl.innerText = "Weather: Storms ⚡🌪️";
-                rainSystem.material.opacity = 0.9;
-                tornados.forEach(t => t.material.opacity = 0.7);
+                rainSystem.material.opacity = 0.85;
+                tornados.forEach(t => t.material.opacity = 0.55);
+                tornadoParticles.forEach(p => p.material.opacity = 0.6);
             } else if (weatherState === 'storm') {
                 weatherState = 'rumble';
                 weatherStatusEl.innerText = "Weather: Rumbling 🌋";
-                tornados.forEach(t => t.material.opacity = 0);
                 rainSystem.material.opacity = 0;
+                tornados.forEach(t => t.material.opacity = 0);
+                tornadoParticles.forEach(p => p.material.opacity = 0);
+                rumbleIntensity = 1.0;
             } else {
                 weatherState = 'normal';
                 weatherStatusEl.innerText = "Weather: Normal ☀️";
                 rainSystem.material.opacity = 0;
                 tornados.forEach(t => t.material.opacity = 0);
+                tornadoParticles.forEach(p => p.material.opacity = 0);
+                rumbleIntensity = 0;
             }
         }
 
-        // --- Hand Tracking & Gesture Classification ---
+        // ---------- Hand Tracking ----------
         async function initHandTracking() {
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240 } });
                 videoElement.srcObject = stream;
-                await new Promise((resolve) => { videoElement.onloadedmetadata = () => resolve(); });
+                await new Promise(r => { videoElement.onloadedmetadata = r; });
                 videoElement.play();
 
                 const model = handPoseDetection.SupportedModels.MediaPipeHands;
@@ -505,7 +630,7 @@
                 detector = await handPoseDetection.createDetector(model, detectorConfig);
                 detectHands();
             } catch (err) {
-                console.warn("Webcam/Hand tracking unavailable:", err);
+                console.warn("Webcam unavailable:", err);
                 gestureStatusEl.innerText = "Gesture: Mouse Mode Active";
             }
         }
@@ -515,11 +640,17 @@
                 try {
                     const hands = await detector.estimateHands(videoElement, { flipHorizontal: true });
                     processGestures(hands);
-                } catch (e) {
-                    console.error(e);
-                }
+                } catch (e) { console.error(e); }
             }
-            setTimeout(detectHands, 100);
+            setTimeout(detectHands, 90);
+        }
+
+        function isFingerExtended(kp, tip, pip) {
+            return kp[tip].y < kp[pip].y - 8;
+        }
+
+        function isFingerCurled(kp, tip, pip) {
+            return kp[tip].y > kp[pip].y + 5;
         }
 
         function processGestures(hands) {
@@ -530,75 +661,101 @@
 
             let thumbsDownCount = 0;
             let middleFingerDetected = false;
-            let openHands = 0;
+            let openHandCount = 0;
+            let closedFistCount = 0;
 
             hands.forEach(hand => {
                 const kp = hand.keypoints;
-                // Check thumb pointing down (tip y > base y)
-                if (kp[4].y > kp[2].y && kp[4].y > kp[3].y) {
+
+                // Thumbs down
+                if (kp[4].y > kp[2].y + 10 && kp[4].y > kp[3].y) {
                     thumbsDownCount++;
                 }
 
-                // Check middle finger extended, others curled
-                const middleExtended = kp[12].y < kp[10].y;
-                const indexCurled = kp[8].y > kp[6].y;
-                const ringCurled = kp[16].y > kp[14].y;
-                if (middleExtended && indexCurled && ringCurled) {
+                // Middle finger only
+                const midExt = isFingerExtended(kp, 12, 10);
+                const idxCurl = isFingerCurled(kp, 8, 6);
+                const ringCurl = isFingerCurled(kp, 16, 14);
+                const pinkyCurl = isFingerCurled(kp, 20, 18);
+                if (midExt && idxCurl && ringCurl && pinkyCurl) {
                     middleFingerDetected = true;
                 }
 
-                // Check open hand (fingers extended)
-                if (kp[8].y < kp[6].y && kp[12].y < kp[10].y) {
-                    openHands++;
+                // Open hand (most fingers extended)
+                const openScore = [
+                    isFingerExtended(kp, 8, 6),
+                    isFingerExtended(kp, 12, 10),
+                    isFingerExtended(kp, 16, 14),
+                    isFingerExtended(kp, 20, 18)
+                ].filter(Boolean).length;
+                if (openScore >= 3) openHandCount++;
+
+                // Closed fist (most fingers curled)
+                const curlScore = [
+                    isFingerCurled(kp, 8, 6),
+                    isFingerCurled(kp, 12, 10),
+                    isFingerCurled(kp, 16, 14),
+                    isFingerCurled(kp, 20, 18)
+                ].filter(Boolean).length;
+                if (curlScore >= 3 && !isFingerExtended(kp, 4, 2)) {
+                    closedFistCount++;
                 }
             });
 
-            // Trigger Thumbs Down Explosion
+            // Double thumbs down → crack + explode
             if (thumbsDownCount >= 2) {
                 const now = Date.now();
-                if (!isExploded && !reassembling && now - lastThumbsDownTime > 3000) {
+                if (!isExploded && !isCracking && !reassembling && now - lastThumbsDownTime > 3500) {
                     lastThumbsDownTime = now;
-                    triggerExplosion();
-                    setTimeout(triggerReassembly, 4000); // Auto magnetic reassemble after 4s
+                    triggerCrackAndExplosion();
                 }
             }
 
-            // Trigger Middle Finger Weather Cycle
-            if (middleFingerDetected) {
-                cycleWeather();
+            if (middleFingerDetected) cycleWeather();
+
+            // Open hand → rotate
+            if (openHandCount > 0 && hands[0]) {
+                const wrist = hands[0].keypoints[0];
+                const xNorm = (wrist.x / 320) - 0.5;
+                const yNorm = (wrist.y / 240) - 0.5;
+                targetRotation.y = xNorm * Math.PI * 1.4;
+                targetRotation.x = yNorm * Math.PI * 0.9;
+                gestureStatusEl.innerText = "Gesture: Rotating Globe";
             }
 
-            // Rotation via open hand position
-            if (openHands > 0 && hands[0]) {
-                const xNorm = (hands[0].keypoints[0].x / 320) - 0.5;
-                const yNorm = (hands[0].keypoints[0].y / 240) - 0.5;
-                targetRotation.y = xNorm * Math.PI;
-                targetRotation.x = yNorm * Math.PI;
-                gestureStatusEl.innerText = "Gesture: Controlling Globe";
+            // Closed fist → scale
+            if (closedFistCount > 0 && hands[0]) {
+                // Use hand size / y position as scale cue
+                const wrist = hands[0].keypoints[0];
+                const yNorm = 1.0 - (wrist.y / 240);
+                targetScale = 0.55 + yNorm * 0.9; // 0.55 – 1.45
+                gestureStatusEl.innerText = "Gesture: Scaling Globe";
             }
         }
 
-        // --- Mouse & Window Fallback Controls ---
+        // ---------- Mouse fallback ----------
         function setupMouseControls() {
-            window.addEventListener('mousedown', (e) => {
+            window.addEventListener('mousedown', e => {
                 isDragging = true;
                 previousMousePosition = { x: e.clientX, y: e.clientY };
             });
-            window.addEventListener('mousemove', (e) => {
+            window.addEventListener('mousemove', e => {
                 if (!isDragging) return;
-                const deltaX = e.clientX - previousMousePosition.x;
-                const deltaY = e.clientY - previousMousePosition.y;
-                targetRotation.y += deltaX * 0.005;
-                targetRotation.x += deltaY * 0.005;
+                const dx = e.clientX - previousMousePosition.x;
+                const dy = e.clientY - previousMousePosition.y;
+                targetRotation.y += dx * 0.005;
+                targetRotation.x += dy * 0.005;
                 previousMousePosition = { x: e.clientX, y: e.clientY };
             });
-            window.addEventListener('mouseup', () => { isDragging = false; });
-            
-            // Click to toggle explosion test
+            window.addEventListener('mouseup', () => isDragging = false);
+
+            window.addEventListener('wheel', e => {
+                targetScale = Math.max(0.5, Math.min(1.6, targetScale - e.deltaY * 0.001));
+            });
+
             window.addEventListener('dblclick', () => {
-                if (!isExploded) {
-                    triggerExplosion();
-                    setTimeout(triggerReassembly, 4000);
+                if (!isExploded && !isCracking) {
+                    triggerCrackAndExplosion();
                 }
             });
         }
@@ -609,87 +766,191 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
         }
 
-        // --- Main Animation Loop ---
+        // ---------- Animation Loop ----------
         function animate() {
             requestAnimationFrame(animate);
+            const time = Date.now() * 0.001;
 
-            // Smooth damping for rotation
-            globeRotation.x += (targetRotation.x - globeRotation.x) * 0.1;
-            globeRotation.y += (targetRotation.y - globeRotation.y) * 0.1;
+            // Smooth rotation & scale
+            globeRotation.x += (targetRotation.x - globeRotation.x) * 0.12;
+            globeRotation.y += (targetRotation.y - globeRotation.y) * 0.12;
+            currentScale += (targetScale - currentScale) * 0.1;
+
             earthGroup.rotation.x = globeRotation.x;
             earthGroup.rotation.y = globeRotation.y;
+            earthGroup.scale.setScalar(currentScale);
 
-            // Continuous slow spin when normal
-            if (!isExploded && !reassembling) {
-                earthGroup.rotation.y += 0.002;
+            if (!isExploded && !isCracking && !reassembling) {
+                earthGroup.rotation.y += 0.0018;
+            }
+            if (cloudMesh) cloudMesh.rotation.y += 0.0009;
+
+            // ----- Crack phase (Solar Smash style) -----
+            if (isCracking) {
+                crackProgress += 0.018;
+                // Intensify bump / emissive as cracks grow
+                crustShards.forEach(s => {
+                    if (s.material.bumpScale !== undefined) {
+                        s.material.bumpScale = 0.18 + crackProgress * 0.6;
+                    }
+                });
+                mantleMesh.material.emissiveIntensity = 0.9 + crackProgress * 1.2;
+                dustParticles.material.opacity = Math.min(0.7, crackProgress * 0.9);
+
+                if (crackProgress >= 1.0) {
+                    isCracking = false;
+                    isExploded = true;
+                    explosionProgress = 0;
+                    debrisParticles.material.opacity = 0.9;
+                    gestureStatusEl.innerText = "Gesture: ERUPTION!";
+                    gestureStatusEl.style.background = "rgba(255, 50, 0, 0.5)";
+
+                    // Launch debris
+                    const pos = debrisParticles.geometry.attributes.position.array;
+                    debrisParticles.userData.velocities.forEach((v, i) => {
+                        pos[i*3] = (Math.random()-0.5)*2;
+                        pos[i*3+1] = (Math.random()-0.5)*2;
+                        pos[i*3+2] = (Math.random()-0.5)*2;
+                        v.set(
+                            (Math.random()-0.5)*0.55,
+                            (Math.random()-0.5)*0.55,
+                            (Math.random()-0.5)*0.55
+                        );
+                    });
+                    debrisParticles.geometry.attributes.position.needsUpdate = true;
+
+                    // Auto reassemble after a few seconds
+                    setTimeout(triggerReassembly, 4500);
+                }
             }
 
-            // Cloud self-rotation
-            if (cloudMesh) cloudMesh.rotation.y += 0.001;
-
-            // Handle Explosion & Magnetic Reassembly Physics
+            // ----- Explosion -----
             if (isExploded && explosionProgress < 1) {
-                explosionProgress += 0.02;
-                crustShards.forEach((shard) => {
-                    shard.position.lerp(shard.userData.explosionDir, 0.08);
+                explosionProgress += 0.015;
+                crustShards.forEach(shard => {
+                    shard.position.lerp(shard.userData.explosionDir, 0.065);
                     shard.rotation.x += shard.userData.rotSpeed.x;
                     shard.rotation.y += shard.userData.rotSpeed.y;
-                });
-            } else if (reassembling) {
-                reassembleTimer += 0.02;
-                dustParticles.material.opacity = Math.max(0, dustParticles.material.opacity - 0.02);
-                
-                let allInPlace = true;
-                crustShards.forEach((shard) => {
-                    shard.position.lerp(new THREE.Vector3(0,0,0), 0.1);
-                    shard.rotation.x *= 0.9;
-                    shard.rotation.y *= 0.9;
-                    shard.rotation.z *= 0.9;
-                    if (shard.position.length() > 0.1) allInPlace = false;
+                    shard.rotation.z += shard.userData.rotSpeed.z;
                 });
 
-                if (allInPlace || reassembleTimer > 3) {
+                // Debris fly outward
+                const dPos = debrisParticles.geometry.attributes.position.array;
+                debrisParticles.userData.velocities.forEach((v, i) => {
+                    dPos[i*3] += v.x;
+                    dPos[i*3+1] += v.y;
+                    dPos[i*3+2] += v.z;
+                    v.multiplyScalar(0.985); // mild drag
+                });
+                debrisParticles.geometry.attributes.position.needsUpdate = true;
+            }
+
+            // ----- Magnetic Reassembly -----
+            if (reassembling) {
+                reassembleTimer += 0.016;
+                dustParticles.material.opacity = Math.max(0, dustParticles.material.opacity - 0.025);
+                debrisParticles.material.opacity = Math.max(0, debrisParticles.material.opacity - 0.03);
+
+                let allInPlace = true;
+                crustShards.forEach(shard => {
+                    shard.position.lerp(new THREE.Vector3(0, 0, 0), 0.085);
+                    shard.rotation.x *= 0.88;
+                    shard.rotation.y *= 0.88;
+                    shard.rotation.z *= 0.88;
+                    if (shard.position.length() > 0.08) allInPlace = false;
+                });
+
+                if (allInPlace || reassembleTimer > 3.5) {
                     reassembling = false;
-                    crustShards.forEach(shard => shard.position.set(0,0,0));
-                    gestureStatusEl.innerText = "Gesture: Reassembled Successfully!";
+                    crustShards.forEach(s => {
+                        s.position.set(0, 0, 0);
+                        s.rotation.set(0, 0, 0);
+                        if (s.material.bumpScale !== undefined) s.material.bumpScale = 0.18;
+                    });
+                    mantleMesh.material.emissiveIntensity = 0.9;
+                    gestureStatusEl.innerText = "Gesture: Reassembled!";
                     gestureStatusEl.style.background = "rgba(255,255,255,0.15)";
                 }
             }
 
-            // Weather animation updates
+            // ----- Weather: Rain -----
             if (weatherState === 'rain' || weatherState === 'storm') {
                 const pos = rainSystem.geometry.attributes.position.array;
-                for(let i=1; i<pos.length; i+=3) {
-                    pos[i] -= 0.3;
-                    if (pos[i] < -5) pos[i] = 10;
+                const vels = rainSystem.geometry.userData.velocities;
+                for (let i = 0; i < vels.length; i++) {
+                    pos[i*3 + 1] -= vels[i];
+                    if (pos[i*3 + 1] < -6) {
+                        pos[i*3 + 1] = 12 + Math.random() * 4;
+                        pos[i*3] = (Math.random() - 0.5) * 18;
+                        pos[i*3 + 2] = (Math.random() - 0.5) * 18;
+                    }
                 }
                 rainSystem.geometry.attributes.position.needsUpdate = true;
             }
 
+            // ----- Weather: Storm + Tornados -----
             if (weatherState === 'storm') {
                 tornados.forEach((t, idx) => {
-                    t.rotation.y += 0.1;
-                    t.position.x = Math.sin(Date.now() * 0.002 + idx) * 5;
-                    t.position.z = Math.cos(Date.now() * 0.002 + idx) * 5;
+                    t.rotation.y += 0.18 + idx * 0.04;
+                    // Smooth orbital movement
+                    const phase = time * 0.7 + t.userData.phase;
+                    t.position.x = Math.sin(phase) * 5.8;
+                    t.position.z = Math.cos(phase) * 5.8;
+                    t.position.y = 0.6 + Math.sin(time * 1.4 + idx) * 0.35;
                 });
-                // Random lightning flash
-                if (Math.random() < 0.03) {
-                    lightningLight.intensity = 5;
-                    setTimeout(() => lightningLight.intensity = 0, 80);
+
+                // Swirl particles around funnels
+                tornadoParticles.forEach(p => {
+                    const parent = p.userData.parent;
+                    const count = p.userData.count;
+                    const pos = p.geometry.attributes.position.array;
+                    for (let i = 0; i < count; i++) {
+                        const a = time * 3.5 + i * 0.4;
+                        const r = 0.3 + (i % 8) * 0.18;
+                        const h = ((i * 0.07 + time * 1.2) % 4.2) - 2.1;
+                        pos[i*3] = parent.position.x + Math.cos(a) * r * (1.1 - h * 0.15);
+                        pos[i*3+1] = parent.position.y + h;
+                        pos[i*3+2] = parent.position.z + Math.sin(a) * r * (1.1 - h * 0.15);
+                    }
+                    p.geometry.attributes.position.needsUpdate = true;
+                });
+
+                // Occasional lightning
+                if (Math.random() < 0.025) {
+                    lightningLight.intensity = 6 + Math.random() * 4;
+                    lightningLight.position.set(
+                        (Math.random()-0.5)*8,
+                        (Math.random()-0.5)*6,
+                        (Math.random()-0.5)*8
+                    );
+                    setTimeout(() => { lightningLight.intensity = 0; }, 70 + Math.random()*60);
                 }
             }
 
+            // ----- Weather: Smooth Rumble -----
             if (weatherState === 'rumble') {
-                earthGroup.position.x = (Math.random() - 0.5) * 0.1;
-                earthGroup.position.y = (Math.random() - 0.5) * 0.1;
+                rumbleIntensity = Math.min(1.2, rumbleIntensity + 0.02);
             } else {
-                earthGroup.position.set(0,0,0);
+                rumbleIntensity *= 0.94;
+            }
+
+            if (rumbleIntensity > 0.01) {
+                const strength = rumbleIntensity * 0.14;
+                shakeOffset.x = Math.sin(time * 28) * strength + Math.sin(time * 41) * strength * 0.4;
+                shakeOffset.y = Math.cos(time * 33) * strength * 0.7;
+                shakeOffset.z = Math.sin(time * 19) * strength * 0.3;
+                earthGroup.position.copy(shakeOffset);
+
+                // Subtle core pulse
+                coreMesh.scale.setScalar(1 + Math.sin(time * 9) * 0.03 * rumbleIntensity);
+            } else {
+                earthGroup.position.set(0, 0, 0);
+                coreMesh.scale.setScalar(1);
             }
 
             renderer.render(scene, camera);
         }
 
-        // Start everything
         init();
     </script>
 </body>
